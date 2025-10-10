@@ -433,10 +433,8 @@
     </div>
 
     <script>
-        // Configuração do servidor central
         let SERVER_URL = 'http://localhost:4000';
 
-        // Carregar configuração
         async function loadConfig() {
             try {
                 const response = await fetch('/api/config');
@@ -448,7 +446,6 @@
             }
         }
 
-        // Gerenciamento de Tabs
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
@@ -460,7 +457,6 @@
             if (tabName === 'banco') loadOSList();
         }
 
-        // Verificar status do bot
         async function checkBotStatus() {
             try {
                 const response = await fetch(`${SERVER_URL}/api/bot/status`);
@@ -485,7 +481,6 @@
             }
         }
 
-        // Iniciar bot
         async function startBot() {
             try {
                 showAlert('osAlert', 'Iniciando bot...', 'success');
@@ -503,7 +498,6 @@
             }
         }
 
-        // Parar bot
         async function stopBot() {
             try {
                 const response = await fetch(`${SERVER_URL}/api/bot/stop`, { method: 'POST' });
@@ -516,7 +510,6 @@
             }
         }
 
-        // Adicionar item na OS
         function addItem() {
             const container = document.getElementById('itensContainer');
             const newItem = document.createElement('div');
@@ -546,12 +539,10 @@
             attachItemCalculation();
         }
 
-        // Remover item
         function removeItem(btn) {
             btn.closest('.item-row').remove();
         }
 
-        // Calcular total dos itens
         function attachItemCalculation() {
             document.querySelectorAll('.item-row').forEach(row => {
                 const qtd = row.querySelector('[name="quantidade"]');
@@ -568,7 +559,6 @@
             });
         }
 
-        // Submit do formulário de OS
         document.getElementById('osForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -603,12 +593,10 @@
                 if (data.success) {
                     showAlert('osAlert', `✅ OS #${data.osId} gerada com sucesso! Valor: ${formatMoney(data.valorTotal)}`, 'success');
                     
-                    // Limpar formulário
                     document.getElementById('osForm').reset();
                     document.getElementById('itensContainer').innerHTML = '';
                     addItem();
 
-                    // Atualizar lista de OS
                     loadOSList();
                 } else {
                     showAlert('osAlert', 'Erro: ' + data.message, 'danger');
@@ -618,7 +606,6 @@
             }
         });
 
-        // Carregar atendimentos
         async function loadAtendimentos() {
             try {
                 const response = await fetch(`${SERVER_URL}/api/atendimentos`);
@@ -664,7 +651,6 @@
             }
         }
 
-        // Carregar lista de OS
         async function loadOSList() {
             try {
                 const response = await fetch(`${SERVER_URL}/api/os/listar`);
@@ -715,7 +701,6 @@
             }
         }
 
-        // Visualizar OS
         async function visualizarOS(osId) {
             try {
                 window.open(`${SERVER_URL}/files/os/OS_${osId}.pdf`, '_blank');
@@ -724,7 +709,6 @@
             }
         }
 
-        // Baixar OS
         async function baixarOS(osId) {
             try {
                 window.location.href = `${SERVER_URL}/api/os/download/${osId}`;
@@ -733,172 +717,21 @@
             }
         }
 
-        // Exibir alerta
         function showAlert(elementId, message, type) {
             const alertDiv = document.getElementById(elementId);
             alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
             setTimeout(() => alertDiv.innerHTML = '', 5000);
         }
 
-        // Formatar moeda
         function formatMoney(value) {
             return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
 
-        // Inicialização
         loadConfig().then(() => {
             checkBotStatus();
             setInterval(checkBotStatus, 10000);
             attachItemCalculation();
         });
-    </script>
-</body>
-</html>
-            const newItem = document.createElement('div');
-            newItem.className = 'item-row';
-            newItem.innerHTML = `
-                <div>
-                    <label>Qtd *</label>
-                    <input type="number" class="form-control" name="quantidade" min="1" value="1" required>
-                </div>
-                <div>
-                    <label>Descrição *</label>
-                    <input type="text" class="form-control" name="descricao" required>
-                </div>
-                <div>
-                    <label>Valor Unitário *</label>
-                    <input type="number" class="form-control" name="valorUnitario" min="0" step="0.01" required>
-                </div>
-                <div>
-                    <label>Total</label>
-                    <input type="text" class="form-control" name="total" readonly>
-                </div>
-                <div>
-                    <button type="button" class="btn-remove" onclick="removeItem(this)">Remover</button>
-                </div>
-            `;
-            container.appendChild(newItem);
-            attachItemCalculation();
-        }
-
-        // Remover item
-        function removeItem(btn) {
-            btn.closest('.item-row').remove();
-        }
-
-        // Calcular total dos itens
-        function attachItemCalculation() {
-            document.querySelectorAll('.item-row').forEach(row => {
-                const qtd = row.querySelector('[name="quantidade"]');
-                const valor = row.querySelector('[name="valorUnitario"]');
-                const total = row.querySelector('[name="total"]');
-
-                const calculate = () => {
-                    const t = (qtd.value || 0) * (valor.value || 0);
-                    total.value = t.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                };
-
-                qtd.addEventListener('input', calculate);
-                valor.addEventListener('input', calculate);
-            });
-        }
-
-        // Submit do formulário de OS
-        document.getElementById('osForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const itens = [];
-            document.querySelectorAll('.item-row').forEach(row => {
-                itens.push({
-                    quantidade: parseInt(row.querySelector('[name="quantidade"]').value),
-                    descricao: row.querySelector('[name="descricao"]').value,
-                    valorUnitario: parseFloat(row.querySelector('[name="valorUnitario"]').value)
-                });
-            });
-
-            const dadosOS = {
-                cliente: document.getElementById('nomeCliente').value,
-                prazoEntrega: document.getElementById('prazoEntrega').value,
-                formaPagamento: document.getElementById('formaPagamento').value,
-                desconto: parseFloat(document.getElementById('desconto').value) || 0,
-                itens: itens
-            };
-
-            console.log('Gerando OS:', dadosOS);
-            showAlert('osAlert', '✅ Ordem de Serviço gerada com sucesso!', 'success');
-            
-            // Limpar formulário
-            document.getElementById('osForm').reset();
-            document.getElementById('itensContainer').innerHTML = '';
-            addItem();
-        });
-
-        // Carregar atendimentos
-        function loadAtendimentos() {
-            // Simulação - implementar chamada real à API
-            const html = `
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Data</th>
-                            <th>Nome</th>
-                            <th>Telefone</th>
-                            <th>Serviço</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td>09/10/2025</td>
-                            <td>João Silva</td>
-                            <td>(83) 99999-9999</td>
-                            <td>Orçamento</td>
-                            <td>Pendente</td>
-                        </tr>
-                    </tbody>
-                </table>
-            `;
-            document.getElementById('atendimentosTable').innerHTML = html;
-        }
-
-        // Carregar lista de OS
-        function loadOSList() {
-            const html = `
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>OS ID</th>
-                            <th>Cliente</th>
-                            <th>Data</th>
-                            <th>Valor</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td colspan="5" style="text-align: center; padding: 40px;">
-                                Nenhuma OS encontrada
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            `;
-            document.getElementById('osListTable').innerHTML = html;
-        }
-
-        // Exibir alerta
-        function showAlert(elementId, message, type) {
-            const alertDiv = document.getElementById(elementId);
-            alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
-            setTimeout(() => alertDiv.innerHTML = '', 5000);
-        }
-
-        // Inicialização
-        checkBotStatus();
-        setInterval(checkBotStatus, 10000);
-        attachItemCalculation();
     </script>
 </body>
 </html>

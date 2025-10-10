@@ -1,4 +1,4 @@
-const PlanilhaService = require('..excel/planilha');
+const PlanilhaService = require('../excel/planilha');
 const CalendarService = require('../google_calendar/calendar');
 const logger = require('../utils/logger');
 
@@ -6,7 +6,7 @@ class MessageHandler {
   constructor() {
     this.planilhaService = new PlanilhaService();
     this.calendarService = new CalendarService();
-    this.userSessions = new Map(); // Armazena sessões de usuários
+    this.userSessions = new Map();
   }
 
   async handle(message, client) {
@@ -16,11 +16,9 @@ class MessageHandler {
 
     logger.info(`Mensagem recebida de ${contact.name || contact.pushname}: ${messageBody}`);
 
-    // Verificar se o usuário tem uma sessão ativa
     let session = this.userSessions.get(userId);
 
     if (!session) {
-      // Nova sessão
       session = {
         step: 'inicio',
         data: {
@@ -32,7 +30,6 @@ class MessageHandler {
       this.userSessions.set(userId, session);
     }
 
-    // Processar de acordo com o passo atual
     await this.processStep(message, session, client);
   }
 
@@ -152,7 +149,6 @@ Obrigado por escolher a Artestofados! 🛋️`);
   async handleData(message, session) {
     const dataTexto = message.body.trim();
     
-    // Validação básica de data
     const regexData = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/;
     const match = dataTexto.match(regexData);
 
@@ -167,7 +163,6 @@ Em breve confirmaremos seu agendamento.
 
 Obrigado por escolher a Artestofados! 🛋️`);
 
-      // Criar evento no Google Calendar
       try {
         await this.calendarService.createEvent({
           summary: `Visita - ${session.data.nome}`,
@@ -189,7 +184,6 @@ Exemplo: 15/10/2025 14:30`);
 
   async finalizarAtendimento(message, session) {
     try {
-      // Salvar na planilha
       await this.planilhaService.addAtendimento({
         nome: session.data.nome,
         telefone: session.data.telefone,
@@ -201,7 +195,6 @@ Exemplo: 15/10/2025 14:30`);
 
       logger.info(`Atendimento finalizado para ${session.data.nome}`);
       
-      // Limpar sessão
       const userId = message.from;
       this.userSessions.delete(userId);
 
@@ -212,12 +205,15 @@ Exemplo: 15/10/2025 14:30`);
   }
 
   parseDateTime(dateTimeStr) {
-    // Converte DD/MM/AAAA HH:MM para objeto Date
     const [datePart, timePart] = dateTimeStr.split(' ');
     const [day, month, year] = datePart.split('/');
     const [hour, minute] = timePart.split(':');
     
     return new Date(year, month - 1, day, hour, minute);
+  }
+
+  async handleFinalizado(message, session) {
+    await this.handleInicio(message, session);
   }
 }
 

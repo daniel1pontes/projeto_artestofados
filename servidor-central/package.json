@@ -1,0 +1,25 @@
+{
+  "name": "artestofados-servidor",
+  "version": "1.0.0",
+  "description": "Servidor Central Artestofados",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.14.0",
+    "googleapis": "^128.0.0",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1",
+    "moment": "^2.29.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

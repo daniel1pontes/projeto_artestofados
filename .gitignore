@@ -1,0 +1,258 @@
+# ============================================
+# .gitignore - Projeto Artestofados
+# ============================================
+
+# ==================== Node.js ====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.eslintcache
+*.tsbuildinfo
+
+# ==================== Ambiente ====================
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+
+# Manter apenas os exemplos
+!.env.example
+
+# ==================== Logs ====================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==================== Dados Sensíveis ====================
+
+# Sessão do WhatsApp (dados da conta)
+data/auth/
+**/data/auth/
+
+# Planilhas com dados reais
+data/atendimentos.xlsx
+data/*.xlsx
+
+# Ordens de Serviço (PDFs com dados dos clientes)
+data/ordens_servico/*.pdf
+
+# Manter estrutura de pastas vazias
+!data/ordens_servico/.gitkeep
+!data/auth/.gitkeep
+
+# ==================== Google Calendar ====================
+# Credenciais e tokens
+google_calendar/config/credentials.json
+google_calendar/config/token.json
+**/config/credentials.json
+**/config/token.json
+src/config/credentials.json
+src/config/token.json
+
+# ==================== Build e Dist ====================
+dist/
+build/
+*.exe
+*.app
+*.dmg
+*.pkg
+out/
+
+# Electron builds
+release/
+electron-builder.yml
+
+# PKG builds
+pkg/
+
+# ==================== Sistema Operacional ====================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==================== IDEs e Editores ====================
+
+# VSCode
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.code-workspace
+.history/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+*~
+tags
+[._]*.un~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==================== Backup e Temporários ====================
+*.bak
+*.backup
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+temp/
+tmp/
+
+# Backups de dados
+backups/
+*.tar.gz
+*.zip
+backup_*.tar.gz
+backup_*.zip
+
+# ==================== Testes ====================
+coverage/
+*.lcov
+.nyc_output
+.grunt
+test-results/
+junit.xml
+
+# ==================== PM2 ====================
+.pm2/
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ==================== Certificados SSL ====================
+*.pem
+*.key
+*.crt
+*.cert
+ssl/
+certificates/
+
+# ==================== Documentação ====================
+# Manter documentação no repo
+!README.md
+!*.md
+!docs/
+
+# Mas ignorar documentação gerada
+docs/_build/
+site/
+
+# ==================== Databases ====================
+*.sqlite
+*.sqlite3
+*.db
+
+# ==================== Usuários do Sistema ====================
+# Arquivo de usuários com senhas hashadas
+src/config/users.json
+**/config/users.json
+
+# Manter apenas o exemplo
+!src/config/users.json.example
+
+# ==================== Específico do Projeto ====================
+
+# Dados de desenvolvimento
+data/test_*.xlsx
+data/dev_*.pdf
+
+# Configurações locais
+config.local.json
+local.config.js
+
+# Scripts de desenvolvimento
+dev-scripts/
+
+# ==================== Opcional - Comentar se necessário ====================
+
+# Descomentar se quiser versionar algumas coisas:
+
+# Manter uma planilha de exemplo vazia
+# !data/atendimentos_exemplo.xlsx
+
+# Manter uma OS de exemplo (sem dados reais)
+# !data/ordens_servico/OS_EXEMPLO.pdf
+
+# Manter credenciais de desenvolvimento (NÃO RECOMENDADO)
+# !.env.development
+
+# ==================== Manter Estrutura de Pastas ====================
+# Arquivos .gitkeep para manter estrutura vazia
+
+!.gitkeep
+!**/.gitkeep

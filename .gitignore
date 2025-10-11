@@ -11,6 +11,7 @@ lerna-debug.log*
 .npm
 .eslintcache
 *.tsbuildinfo
+package-lock.json
 
 # ==================== Ambiente ====================
 .env
@@ -37,17 +38,26 @@ lerna-debug.log*
 # Sessão do WhatsApp (dados da conta)
 data/auth/
 **/data/auth/
+.wwebjs_auth/
+.wwebjs_cache/
 
 # Planilhas com dados reais
 data/atendimentos.xlsx
 data/*.xlsx
+!data/atendimentos_exemplo.xlsx
 
 # Ordens de Serviço (PDFs com dados dos clientes)
 data/ordens_servico/*.pdf
+!data/ordens_servico/.gitkeep
+
+# Backups
+data/backups/
+backups/
 
 # Manter estrutura de pastas vazias
 !data/ordens_servico/.gitkeep
 !data/auth/.gitkeep
+!data/.gitkeep
 
 # ==================== Google Calendar ====================
 # Credenciais e tokens
@@ -57,6 +67,8 @@ google_calendar/config/token.json
 **/config/token.json
 src/config/credentials.json
 src/config/token.json
+servidor-central/config/credentials.json
+servidor-central/config/token.json
 
 # ==================== Build e Dist ====================
 dist/
@@ -70,6 +82,8 @@ out/
 # Electron builds
 release/
 electron-builder.yml
+cliente-desktop/dist/
+cliente-desktop/build/
 
 # PKG builds
 pkg/
@@ -238,6 +252,19 @@ local.config.js
 # Scripts de desenvolvimento
 dev-scripts/
 
+# Puppeteer
+.puppeteer/
+
+# WhatsApp Web.js
+.wwebjs_auth/
+.wwebjs_cache/
+RemoteAuth-*/
+
+# ==================== Electron ====================
+cliente-desktop/.webpack/
+cliente-desktop/out/
+cliente-desktop/release/
+
 # ==================== Opcional - Comentar se necessário ====================
 
 # Descomentar se quiser versionar algumas coisas:
@@ -256,3 +283,9 @@ dev-scripts/
 
 !.gitkeep
 !**/.gitkeep
+
+# ==================== Ignorar arquivos de lock (Opcional) ====================
+# Descomente se não quiser versionar os lock files
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

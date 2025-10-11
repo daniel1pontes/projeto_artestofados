@@ -6,10 +6,10 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1200,
-    minHeight: 700,
+    width: 1920,
+    height: 1080,
+    minWidth: 1500,
+    minHeight: 800,
     icon: path.join(__dirname, 'build/icon.png'),
     webPreferences: {
       nodeIntegration: true,

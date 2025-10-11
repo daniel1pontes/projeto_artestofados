@@ -385,6 +385,146 @@ function formatMoney(value) {
         currency: 'BRL' 
     });
 }
+// ==================== FUNÇÕES DE QR CODE ====================
+
+let qrCodeInterval = null;
+
+async function checkQRCode() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/bot/qrcode`);
+        const data = await response.json();
+
+        const qrCodeCard = document.getElementById('qrCodeCard');
+        const qrCodeImage = document.getElementById('qrCodeImage');
+        const qrCodeStatus = document.getElementById('qrCodeStatus');
+
+        if (data.success && data.qrCode) {
+            // Mostrar card do QR Code
+            qrCodeCard.style.display = 'block';
+            
+            // Atualizar imagem do QR Code
+            qrCodeImage.src = data.qrCode;
+            qrCodeImage.style.display = 'block';
+            
+            // Atualizar status
+            qrCodeStatus.textContent = '✅ QR Code disponível! Escaneie com seu WhatsApp.';
+            qrCodeStatus.style.color = '#27ae60';
+            
+        } else {
+            // Esconder card do QR Code
+            qrCodeCard.style.display = 'none';
+            qrCodeImage.src = '';
+            qrCodeImage.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Erro ao verificar QR Code:', error);
+    }
+}
+
+async function startBot() {
+    try {
+        showAlert('osAlert', 'Iniciando bot...', 'success');
+        
+        const response = await fetch(`${SERVER_URL}/api/bot/start`, { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('osAlert', data.message, 'success');
+            checkBotStatus();
+            
+            // Iniciar verificação periódica do QR Code
+            startQRCodePolling();
+        } else {
+            showAlert('osAlert', data.message, 'danger');
+        }
+    } catch (error) {
+        showAlert('osAlert', 'Erro ao iniciar bot: ' + error.message, 'danger');
+    }
+}
+
+async function stopBot() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/bot/stop`, { method: 'POST' });
+        const data = await response.json();
+        
+        showAlert('osAlert', data.message, data.success ? 'success' : 'danger');
+        checkBotStatus();
+        
+        // Parar verificação do QR Code
+        stopQRCodePolling();
+        
+        // Esconder card do QR Code
+        document.getElementById('qrCodeCard').style.display = 'none';
+    } catch (error) {
+        showAlert('osAlert', 'Erro ao parar bot: ' + error.message, 'danger');
+    }
+}
+
+function startQRCodePolling() {
+    // Parar polling anterior se existir
+    stopQRCodePolling();
+    
+    // Verificar imediatamente
+    checkQRCode();
+    
+    // Verificar a cada 2 segundos
+    qrCodeInterval = setInterval(checkQRCode, 2000);
+}
+
+function stopQRCodePolling() {
+    if (qrCodeInterval) {
+        clearInterval(qrCodeInterval);
+        qrCodeInterval = null;
+    }
+}
+
+async function checkBotStatus() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/bot/status`);
+        const data = await response.json();
+        
+        const indicator = document.getElementById('botStatus');
+        const text = document.getElementById('botStatusText');
+        
+        if (data.status === 'online' && data.connected) {
+            indicator.className = 'status-indicator online';
+            text.textContent = '✅ Bot conectado e operando';
+            text.style.color = '#28a745';
+            
+            // Parar verificação do QR Code quando conectado
+            stopQRCodePolling();
+            document.getElementById('qrCodeCard').style.display = 'none';
+            
+        } else if (data.status === 'online') {
+            indicator.className = 'status-indicator offline';
+            text.textContent = '⏳ Bot iniciado, aguardando conexão...';
+            text.style.color = '#ffc107';
+            
+            // Continuar verificando QR Code
+            if (!qrCodeInterval) {
+                startQRCodePolling();
+            }
+            
+        } else {
+            indicator.className = 'status-indicator offline';
+            text.textContent = '⚠️ Bot desconectado';
+            text.style.color = '#dc3545';
+            
+            // Parar verificação do QR Code
+            stopQRCodePolling();
+            document.getElementById('qrCodeCard').style.display = 'none';
+        }
+
+        updateServerStatus(true);
+    } catch (error) {
+        console.error('Erro ao verificar status:', error);
+        document.getElementById('botStatusText').textContent = '❌ Erro ao conectar com servidor';
+        document.getElementById('botStatusText').style.color = '#dc3545';
+        updateServerStatus(false);
+        
+        stopQRCodePolling();
+    }
+}
 
 // ==================== INICIALIZAÇÃO ====================
 

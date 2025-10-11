@@ -15,6 +15,7 @@ class ServidorCentral {
     this.bot = null;
     this.geradorOS = new GeradorOS();
     this.planilhaService = new PlanilhaService();
+    this.qrCodeData = null;
   }
 
   setupMiddlewares() {
@@ -45,16 +46,39 @@ class ServidorCentral {
       });
     });
 
+    this.app.get('/api/bot/qrcode', (req, res) => {
+      if (this.qrCodeData) {
+        res.json({
+          success: true,
+          qrCode: this.qrCodeData,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'QR Code não disponível. Inicie o bot primeiro.',
+          qrCode: null
+        });
+      }
+    });
+
     // Iniciar bot
     this.app.post('/api/bot/start', async (req, res) => {
       try {
         if (!this.bot) {
-          this.bot = new WhatsAppBot();
+          // Callback para atualizar QR Code
+          const onQRCodeUpdate = (qrCode) => {
+            this.qrCodeData = qrCode;
+            logger.info('QR Code atualizado');
+          };
+
+          this.bot = new WhatsAppBot(onQRCodeUpdate);
           await this.bot.initialize();
+          
           logger.info('Bot iniciado via API');
           res.json({ 
             success: true, 
-            message: 'Bot iniciado com sucesso. Escaneie o QR Code no terminal do servidor.' 
+            message: 'Bot iniciado com sucesso. Aguarde o QR Code aparecer na interface.' 
           });
         } else {
           res.json({ 
@@ -64,6 +88,7 @@ class ServidorCentral {
         }
       } catch (error) {
         logger.error('Erro ao iniciar bot:', error);
+        this.qrCodeData = null;
         res.status(500).json({ 
           success: false, 
           message: error.message 
@@ -77,6 +102,7 @@ class ServidorCentral {
         if (this.bot) {
           this.bot.destroy();
           this.bot = null;
+          this.qrCodeData = null;
           logger.info('Bot desconectado via API');
           res.json({ 
             success: true, 
@@ -343,31 +369,22 @@ class ServidorCentral {
         logger.info(`📡 Porta: ${this.port}`);
         logger.info(`🌐 Acessível em: http://0.0.0.0:${this.port}`);
         logger.info('═══════════════════════════════════════════');
-        logger.info('📱 Endpoints disponíveis:');
-        logger.info(`   • Status Bot: GET /api/bot/status`);
-        logger.info(`   • Iniciar Bot: POST /api/bot/start`);
-        logger.info(`   • Listar OS: GET /api/os/listar`);
-        logger.info(`   • Criar OS: POST /api/os/criar`);
-        logger.info('═══════════════════════════════════════════');
       });
 
-      // Inicializar bot automaticamente
+      // Inicializar bot automaticamente com callback
       logger.info('🤖 Inicializando WhatsApp Bot...');
-      this.bot = new WhatsAppBot();
+      const onQRCodeUpdate = (qrCode) => {
+        this.qrCodeData = qrCode;
+        logger.info('QR Code atualizado');
+      };
+      
+      this.bot = new WhatsAppBot(onQRCodeUpdate);
       await this.bot.initialize();
 
     } catch (error) {
       logger.error('Erro ao iniciar servidor:', error);
       process.exit(1);
     }
-  }
-
-  shutdown() {
-    logger.info('Encerrando servidor central...');
-    if (this.bot) {
-      this.bot.destroy();
-    }
-    process.exit(0);
   }
 }
 

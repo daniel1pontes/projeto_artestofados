@@ -7,20 +7,13 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app-container">
+   <div class="app-container">
         <!-- SIDEBAR -->
         <aside class="sidebar">
             <div class="logo-container">
                 <div class="logo">
-                    <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="8" y="20" width="44" height="32" rx="4" fill="#2C3E50" stroke="#34495E" stroke-width="2"/>
-                        <path d="M12 24 Q20 18, 28 24 L40 24 Q48 18, 52 24" stroke="#34495E" stroke-width="2" fill="none"/>
-                        <circle cx="15" cy="38" r="3" fill="#34495E"/>
-                        <circle cx="45" cy="38" r="3" fill="#34495E"/>
-                        <line x1="20" y1="28" x2="40" y2="28" stroke="#34495E" stroke-width="2"/>
-                    </svg>
+                    <img src="build/logo_cortada.png" alt="Logo Artestofados">
                 </div>
-                <h2 class="logo-text">ARTESTOFADOS</h2>
             </div>
 
             <nav class="sidebar-nav">
@@ -73,29 +66,19 @@
                 <div id="chatbot" class="tab-content active">
                     <div class="status-card">
                         <h3>
-                            <span class="status-indicator" id="botStatus"></span>
+                            <span class="status-indicator online" id="botStatus"></span>
                             Status do Bot
                         </h3>
-                        <p id="botStatusText">Verificando status...</p>
+                        <p id="botStatusText">Bot ativo e conectado</p>
                         <div class="button-group">
-                            <button class="btn btn-primary" onclick="startBot()">Conectar WhatsApp</button>
-                            <button class="btn btn-danger" onclick="stopBot()">Desconectar</button>
-                        </div>
-                    </div>
-
-                    <!-- CARD DO QR CODE -->
-                    <div class="card" id="qrCodeCard" style="display: none;">
-                        <h3>📱 Escaneie o QR Code</h3>
-                        <p>Abra o WhatsApp no seu celular e escaneie o código abaixo:</p>
-                        <div class="qr-code-container">
-                            <img id="qrCodeImage" src="" alt="QR Code" style="max-width: 300px; margin: 20px auto; display: block; border: 2px solid #ddd; padding: 10px; border-radius: 8px;">
-                            <p id="qrCodeStatus" style="text-align: center; color: #666; margin-top: 10px;">Aguardando QR Code...</p>
+                            <button class="btn btn-primary">Conectar WhatsApp</button>
+                            <button class="btn btn-danger">Desconectar</button>
                         </div>
                     </div>
 
                     <div class="card">
                         <h3>📊 Atendimentos Registrados</h3>
-                        <div id="atendimentosTable"></div>
+                        <p>Lista de atendimentos aparecerá aqui...</p>
                     </div>
                 </div>
 
@@ -104,8 +87,6 @@
                     <div class="card">
                         <h3>📄 Nova Ordem de Serviço</h3>
                         
-                        <div id="osAlert"></div>
-
                         <form id="osForm">
                             <div class="form-group">
                                 <label>Nome do Cliente *</label>
@@ -157,7 +138,7 @@
                                 </div>
                             </div>
 
-                            <button type="button" class="btn-add" onclick="addItem()">+ Adicionar Item</button>
+                            <button type="button" class="btn-add">+ Adicionar Item</button>
 
                             <div style="margin-top: 30px;">
                                 <button type="submit" class="btn btn-primary">Gerar Ordem de Serviço</button>
@@ -175,7 +156,7 @@
                             <input type="text" class="form-control" id="searchOS" placeholder="Buscar por nome do cliente...">
                         </div>
 
-                        <div id="osListTable"></div>
+                        <p>Lista de ordens de serviço aparecerá aqui...</p>
                     </div>
                 </div>
             </div>

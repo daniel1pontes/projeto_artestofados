@@ -2,21 +2,46 @@
   "name": "artestofados-cliente",
   "version": "1.0.0",
   "description": "Cliente Desktop Artestofados",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node index.js",
-    "build": "pkg . --targets node18-win-x64 --output artestofados.exe"
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win --x64",
+    "build-linux": "electron-builder --linux",
+    "build-mac": "electron-builder --mac"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "dotenv": "^16.3.1",
-    "open": "^8.4.0"
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "pkg": "^5.8.1"
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
   },
-  "pkg": {
-    "assets": ["public/**/*"],
-    "outputPath": "dist"
+  "build": {
+    "appId": "com.artestofados.cliente",
+    "productName": "Artestofados",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      ".env.example"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artestofados - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛋️ ARTESTOFADOS</h1>
+            <p>Sistema de Gerenciamento de Atendimentos e Ordens de Serviço</p>
+            <div class="server-info">
+                <span id="serverStatus">🔴 Desconectado</span>
+                <span id="serverUrl"></span>
+            </div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('chatbot')">Chatbot</button>
+            <button class="nav-tab" onclick="switchTab('gerador')">Gerador de OS</button>
+            <button class="nav-tab" onclick="switchTab('banco')">Banco de OS</button>
+        </div>
+
+        <div class="content">
+            <!-- TAB CHATBOT -->
+            <div id="chatbot" class="tab-content active">
+                <!-- Mesmo conteúdo do dashboard.html anterior -->
+                <div class="status-card">
+                    <h3>
+                        <span class="status-indicator" id="botStatus"></span>
+                        Status do Bot
+                    </h3>
+                    <p id="botStatusText">Verificando status...</p>
+                    <div class="button-group">
+                        <button class="btn btn-primary" onclick="startBot()">Conectar WhatsApp</button>
+                        <button class="btn btn-danger" onclick="stopBot()">Desconectar</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>📊 Atendimentos Registrados</h3>
+                    <div id="atendimentosTable"></div>
+                </div>
+            </div>
+
+            <!-- TAB GERADOR DE OS -->
+            <div id="gerador" class="tab-content">
+                <!-- Mesmo conteúdo do dashboard.html anterior -->
+                <div class="card">
+                    <h3>📄 Nova Ordem de Serviço</h3>
+                    
+                    <div id="osAlert"></div>
+
+                    <form id="osForm">
+                        <!-- Mesmo formulário do dashboard.html anterior -->
+                        <div class="form-group">
+                            <label>Nome do Cliente *</label>
+                            <input type="text" class="form-control" id="nomeCliente" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Prazo de Entrega *</label>
+                            <input type="text" class="form-control" id="prazoEntrega" placeholder="Ex: 15/11/2025" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Forma de Pagamento *</label>
+                            <select class="form-control" id="formaPagamento" required>
+                                <option value="">Selecione...</option>
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="PIX">PIX</option>
+                                <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                <option value="Cartão de Débito">Cartão de Débito</option>
+                                <option value="Transferência">Transferência</option>
+                                <option value="Boleto">Boleto</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Desconto (%)</label>
+                            <input type="number" class="form-control" id="desconto" min="0" max="100" value="0">
+                        </div>
+
+                        <h4 style="margin: 25px 0 15px 0;">Itens do Serviço</h4>
+                        <div id="itensContainer">
+                            <div class="item-row">
+                                <div>
+                                    <label>Qtd *</label>
+                                    <input type="number" class="form-control" name="quantidade" min="1" value="1" required>
+                                </div>
+                                <div>
+                                    <label>Descrição *</label>
+                                    <input type="text" class="form-control" name="descricao" required>
+                                </div>
+                                <div>
+                                    <label>Valor Unitário *</label>
+                                    <input type="number" class="form-control" name="valorUnitario" min="0" step="0.01" required>
+                                </div>
+                                <div>
+                                    <label>Total</label>
+                                    <input type="text" class="form-control" name="total" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn-add" onclick="addItem()">+ Adicionar Item</button>
+
+                        <div style="margin-top: 30px;">
+                            <button type="submit" class="btn btn-primary">Gerar Ordem de Serviço</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- TAB BANCO DE OS -->
+            <div id="banco" class="tab-content">
+                <div class="card">
+                    <h3>🗂️ Banco de Ordens de Serviço</h3>
+                    
+                    <div class="search-box">
+                        <input type="text" class="form-control" id="searchOS" placeholder="Buscar por nome do cliente...">
+                    </div>
+
+                    <div id="osListTable"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

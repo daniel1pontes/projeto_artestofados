@@ -17,13 +17,15 @@ async function loadConfig() {
 }
 
 function updateServerStatus(connected) {
-    const statusEl = document.getElementById('serverStatus');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('serverStatus');
+    
     if (connected) {
-        statusEl.textContent = '🟢 Conectado';
-        statusEl.style.color = '#28a745';
+        statusDot.classList.remove('disconnected');
+        statusText.textContent = 'Conectado';
     } else {
-        statusEl.textContent = '🔴 Desconectado';
-        statusEl.style.color = '#dc3545';
+        statusDot.classList.add('disconnected');
+        statusText.textContent = 'Desconectado';
     }
 }
 
@@ -32,11 +34,24 @@ function updateServerStatus(connected) {
 function switchTab(tabName) {
     // Remover classe active de todos os conteúdos e botões
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
     
     // Adicionar classe active ao tab selecionado
     document.getElementById(tabName).classList.add('active');
-    event.target.classList.add('active');
+    
+    // Encontrar e ativar o botão correto baseado no evento
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+    } else {
+        // Fallback: encontrar pelo onclick
+        const buttons = document.querySelectorAll('.nav-button');
+        buttons.forEach(btn => {
+            const onclickStr = btn.getAttribute('onclick');
+            if (onclickStr && onclickStr.includes(tabName)) {
+                btn.classList.add('active');
+            }
+        });
+    }
 
     // Carregar dados específicos de cada tab
     if (tabName === 'chatbot') {
@@ -397,13 +412,13 @@ document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) {
         switch(e.key) {
             case '1':
-                document.querySelector('[onclick="switchTab(\'chatbot\')"]').click();
+                document.querySelector('[onclick*="chatbot"]').click();
                 break;
             case '2':
-                document.querySelector('[onclick="switchTab(\'gerador\')"]').click();
+                document.querySelector('[onclick*="gerador"]').click();
                 break;
             case '3':
-                document.querySelector('[onclick="switchTab(\'banco\')"]').click();
+                document.querySelector('[onclick*="banco"]').click();
                 break;
         }
     }

@@ -306,6 +306,8 @@ async function loadOSList() {
                 <table class="table">
                     <thead>
                         <tr>
+                            <th>#</th>
+                            <th>Cliente</th>
                             <th>OS ID</th>
                             <th>Arquivo</th>
                             <th>Ações</th>
@@ -313,17 +315,19 @@ async function loadOSList() {
                     </thead>
                     <tbody>`;
             
-            data.ordens.forEach(os => {
+            data.ordens.forEach((os, index) => {
                 html += `
                     <tr>
+                        <td>${index + 1}</td>
+                        <td>${os.cliente || 'Desconhecido'}</td>
                         <td>${os.osId}</td>
                         <td>${os.arquivo}</td>
                         <td>
                             <button class="btn btn-primary" onclick="visualizarOS('${os.osId}')">
-                                Visualizar
+                                VISUALIZAR
                             </button>
                             <button class="btn btn-secondary" onclick="baixarOS('${os.osId}')">
-                                Baixar
+                                BAIXAR
                             </button>
                         </td>
                     </tr>`;

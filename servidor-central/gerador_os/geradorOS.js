@@ -38,7 +38,32 @@ class GeradorOS {
       return data; // Retorna o valor original em caso de erro
     }
   }
+  // Adicione este método na classe GeradorOS, depois do método formatarData
 
+  async salvarMetadados(metadata) {
+    try {
+      const metadataPath = path.join(this.outputDir, 'metadata.json');
+      let allMetadata = [];
+
+      // Tentar carregar metadados existentes
+      try {
+        const data = await fs.promises.readFile(metadataPath, 'utf8');
+        allMetadata = JSON.parse(data);
+      } catch (error) {
+        // Arquivo não existe ainda
+        allMetadata = [];
+      }
+
+      // Adicionar novo metadado
+      allMetadata.push(metadata);
+
+      // Salvar arquivo atualizado
+      await fs.promises.writeFile(metadataPath, JSON.stringify(allMetadata, null, 2));
+      logger.info('Metadados salvos com sucesso');
+    } catch (error) {
+      logger.error('Erro ao salvar metadados:', error);
+    }
+  }
   async ensureOutputDir() {
     try {
       await fs.promises.mkdir(this.outputDir, { recursive: true });
@@ -105,11 +130,22 @@ class GeradorOS {
               const valorTotal = dados.itens.reduce((sum, item) =>
                 sum + (parseFloat(item.quantidade) * parseFloat(item.valorUnitario)), 0);
 
+              // *** SALVAR METADADOS DA OS ***
+              await this.salvarMetadados({
+                osId,
+                cliente: dados.cliente,
+                valorTotal,
+                dataCriacao: new Date().toISOString(),
+                prazoEntrega: dados.prazoEntrega,
+                formaPagamento: dados.formaPagamento
+              });
+
               resolve({
                 osId,
                 filePath,
                 fileName,
                 valorTotal,
+                cliente: dados.cliente, // ADICIONAR ISTO
                 sucesso: true
               });
             } catch (error) {
@@ -443,16 +479,34 @@ class GeradorOS {
     }
   }
 
-  async listarOS() {
+    async listarOS() {
     try {
       await this.ensureOutputDir();
+      const metadataPath = path.join(this.outputDir, 'metadata.json');
+      
+      // Tentar carregar metadados
+      let metadata = [];
+      try {
+        const data = await fs.promises.readFile(metadataPath, 'utf8');
+        metadata = JSON.parse(data);
+      } catch (error) {
+        logger.warn('Arquivo de metadados não encontrado');
+      }
+
       const files = await fs.promises.readdir(this.outputDir);
-      return files
-        .filter(file => file.startsWith('OS_') && file.endsWith('.pdf'))
-        .map(file => {
+      const osFiles = files.filter(file => file.startsWith('OS_') && file.endsWith('.pdf'));
+      
+      return osFiles
+        .map((file, index) => {
           const osId = file.replace('OS_', '').replace('.pdf', '');
+          const meta = metadata.find(m => m.osId === osId);
+          
           return {
+            id: index + 1, // ID sequencial
             osId,
+            cliente: meta ? meta.cliente : 'Desconhecido',
+            valorTotal: meta ? meta.valorTotal : 0,
+            dataCriacao: meta ? meta.dataCriacao : null,
             arquivo: file,
             caminho: path.join(this.outputDir, file)
           };

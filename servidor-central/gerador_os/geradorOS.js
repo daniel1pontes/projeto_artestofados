@@ -13,7 +13,31 @@ class GeradorOS {
 
   this.ensureOutputDir();
 }
-
+  formatarData(data) {
+    // Se já vier como string no formato correto, retorna
+    if (typeof data === 'string' && data.includes('/')) {
+      return data;
+    }
+    
+    // Se vier como objeto Date ou string ISO
+    try {
+      const dataObj = new Date(data);
+      
+      // Verifica se é uma data válida
+      if (isNaN(dataObj.getTime())) {
+        return data; // Retorna o valor original se não for válida
+      }
+      
+      const dia = String(dataObj.getDate()).padStart(2, '0');
+      const mes = String(dataObj.getMonth() + 1).padStart(2, '0');
+      const ano = dataObj.getFullYear();
+      
+      return `${dia}/${mes}/${ano}`;
+    } catch (error) {
+      logger.error('Erro ao formatar data:', error);
+      return data; // Retorna o valor original em caso de erro
+    }
+  }
 
   async ensureOutputDir() {
     try {
@@ -298,17 +322,17 @@ class GeradorOS {
     doc.y = currentY + alturaTotal + 15;
     }
   adicionarDadosCliente(doc, dados) {
-    doc
-      .fontSize(11)
-      .font('Helvetica-Bold')
-      .fillColor('#000000')
-      .text(`Cliente: ${dados.cliente}`, 70)
-      .moveDown(0.5)
-      .text(`Prazo de entrega: ${dados.prazoEntrega}`)
-      .moveDown(0.5)
-      .text(`Forma de Pagamento: ${dados.formaPagamento}`)
-      .moveDown(2);
-  }
+  doc
+    .fontSize(11)
+    .font('Helvetica-Bold')
+    .fillColor('#000000')
+    .text(`Cliente: ${dados.cliente}`, 70)
+    .moveDown(0.5)
+    .text(`Prazo de entrega: ${this.formatarData(dados.prazoEntrega)}`)
+    .moveDown(0.5)
+    .text(`Forma de Pagamento: ${dados.formaPagamento}`)
+    .moveDown(2);
+}
 
   adicionarAssinaturas(doc) {
     // Verifica espaço na página

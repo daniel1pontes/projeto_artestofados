@@ -125,8 +125,12 @@
 
                     <div class="form-group">
                         <label>Imagens (opcional)</label>
-                        <input type="file" id="imagens" multiple accept="image/*">
-                        <small>Você pode anexar várias imagens (anexos aparecerão abaixo da assinatura).</small>
+                        <input type="file" id="imagens" multiple accept="image/*" style="display: none;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('imagens').click()">
+                            + Adicionar Imagens
+                        </button>
+                        <div id="imagensPreview" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;"></div>
+                        <small>Você pode adicionar várias imagens. Elas serão acumuladas.</small>
                     </div>
 
                     <h4 style="margin: 25px 0 15px 0;">Itens do Serviço</h4>

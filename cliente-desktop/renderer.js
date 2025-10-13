@@ -228,58 +228,71 @@ function attachItemCalculation() {
 
 // Handler do formulário de OS
 document.addEventListener('DOMContentLoaded', () => {
-    const osForm = document.getElementById('osForm');
-    if (osForm) {
-        osForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const itens = [];
-            document.querySelectorAll('.item-row').forEach(row => {
-                itens.push({
-                    quantidade: parseInt(row.querySelector('[name="quantidade"]').value),
-                    descricao: row.querySelector('[name="descricao"]').value,
-                    valorUnitario: parseFloat(row.querySelector('[name="valorUnitario"]').value)
-                });
-            });
-
-            const dadosOS = {
-                cliente: document.getElementById('nomeCliente').value,
-                prazoEntrega: document.getElementById('prazoEntrega').value,
-                formaPagamento: document.getElementById('formaPagamento').value,
-                desconto: parseFloat(document.getElementById('desconto').value) || 0,
-                itens: itens
-            };
-
-            try {
-                showAlert('osAlert', 'Gerando Ordem de Serviço...', 'success');
-                
-                const response = await fetch(`${SERVER_URL}/api/os/criar`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dadosOS)
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showAlert('osAlert', `✅ OS #${data.osId} gerada com sucesso! Valor: ${formatMoney(data.valorTotal)}`, 'success');
-                    
-                    // Limpar formulário
-                    osForm.reset();
-                    document.getElementById('itensContainer').innerHTML = '';
-                    addItem();
-
-                    // Atualizar lista de OS
-                    loadOSList();
-                } else {
-                    showAlert('osAlert', 'Erro: ' + data.message, 'danger');
-                }
-            } catch (error) {
-                showAlert('osAlert', 'Erro ao gerar OS: ' + error.message, 'danger');
-            }
+  const osForm = document.getElementById('osForm');
+  if (osForm) {
+    osForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const itens = [];
+      document.querySelectorAll('.item-row').forEach(row => {
+        itens.push({
+          quantidade: parseInt(row.querySelector('[name="quantidade"]').value),
+          descricao: row.querySelector('[name="descricao"]').value,
+          valorUnitario: parseFloat(row.querySelector('[name="valorUnitario"]').value)
         });
-    }
+      });
+
+      const imagensInput = document.getElementById('imagens');
+      const imagens = [];
+
+      for (const file of imagensInput.files) {
+        const base64 = await toBase64(file);
+        imagens.push({ nome: file.name, data: base64 });
+      }
+
+      const dadosOS = {
+        cliente: document.getElementById('nomeCliente').value,
+        prazoEntrega: document.getElementById('prazoEntrega').value,
+        formaPagamento: document.getElementById('formaPagamento').value,
+        desconto: parseFloat(document.getElementById('desconto').value) || 0,
+        itens: itens,
+        imagens: imagens
+      };
+
+      try {
+        showAlert('osAlert', 'Gerando Ordem de Serviço...', 'success');
+        const response = await fetch(`${SERVER_URL}/api/os/criar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dadosOS)
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          showAlert('osAlert', `✅ OS #${data.osId} gerada com sucesso! Valor: ${formatMoney(data.valorTotal)}`, 'success');
+          osForm.reset();
+          document.getElementById('itensContainer').innerHTML = '';
+          addItem();
+          loadOSList();
+        } else {
+          showAlert('osAlert', 'Erro: ' + data.message, 'danger');
+        }
+      } catch (error) {
+        showAlert('osAlert', 'Erro ao gerar OS: ' + error.message, 'danger');
+      }
+    });
+  }
 });
+
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+  });
+}
+
 
 // ==================== FUNÇÕES DO BANCO DE OS ====================
 

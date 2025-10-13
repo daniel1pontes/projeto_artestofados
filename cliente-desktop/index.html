@@ -71,81 +71,76 @@
                         </h3>
                         <p id="botStatusText">Bot ativo e conectado</p>
                         <div class="button-group">
-                            <button class="btn btn-primary">Conectar WhatsApp</button>
-                            <button class="btn btn-danger">Desconectar</button>
+                            <button class="btn btn-primary" onclick="startBot()">Conectar WhatsApp</button>
+                            <button class="btn btn-danger" onclick="stopBot()">Desconectar</button>
+                        </div>
+                    </div>
+
+                    <!-- QR CODE CARD -->
+                    <div id="qrCodeCard" class="card" style="display: none;">
+                        <h3>📱 QR Code WhatsApp</h3>
+                        <div style="text-align: center;">
+                            <img id="qrCodeImage" src="" alt="QR Code" style="max-width: 300px; margin: 20px 0; display: none;">
+                            <p id="qrCodeStatus">Aguardando QR Code...</p>
                         </div>
                     </div>
 
                     <div class="card">
                         <h3>📊 Atendimentos Registrados</h3>
-                        <p>Lista de atendimentos aparecerá aqui...</p>
+                        <div id="atendimentosTable">
+                            <p>Lista de atendimentos aparecerá aqui...</p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- TAB GERADOR DE OS -->
+                <!-- TAB GERADOR DE OS -->
                 <div id="gerador" class="tab-content">
-                    <div class="card">
-                        <h3>📄 Nova Ordem de Serviço</h3>
-                        
-                        <form id="osForm">
-                            <div class="form-group">
-                                <label>Nome do Cliente *</label>
-                                <input type="text" class="form-control" id="nomeCliente" required>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Prazo de Entrega *</label>
-                                <input type="text" class="form-control" id="prazoEntrega" placeholder="Ex: 15/11/2025" required>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Forma de Pagamento *</label>
-                                <select class="form-control" id="formaPagamento" required>
-                                    <option value="">Selecione...</option>
-                                    <option value="Dinheiro">Dinheiro</option>
-                                    <option value="PIX">PIX</option>
-                                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                                    <option value="Cartão de Débito">Cartão de Débito</option>
-                                    <option value="Transferência">Transferência</option>
-                                    <option value="Boleto">Boleto</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Desconto (%)</label>
-                                <input type="number" class="form-control" id="desconto" min="0" max="100" value="0">
-                            </div>
-
-                            <h4 style="margin: 25px 0 15px 0;">Itens do Serviço</h4>
-                            <div id="itensContainer">
-                                <div class="item-row">
-                                    <div>
-                                        <label>Qtd *</label>
-                                        <input type="number" class="form-control" name="quantidade" min="1" value="1" required>
-                                    </div>
-                                    <div>
-                                        <label>Descrição *</label>
-                                        <input type="text" class="form-control" name="descricao" required>
-                                    </div>
-                                    <div>
-                                        <label>Valor Unitário *</label>
-                                        <input type="number" class="form-control" name="valorUnitario" min="0" step="0.01" required>
-                                    </div>
-                                    <div>
-                                        <label>Total</label>
-                                        <input type="text" class="form-control" name="total" readonly>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button type="button" class="btn-add">+ Adicionar Item</button>
-
-                            <div style="margin-top: 30px;">
-                                <button type="submit" class="btn btn-primary">Gerar Ordem de Serviço</button>
-                            </div>
-                        </form>
+                <div class="card">
+                    <h3>📄 Nova Ordem de Serviço</h3>
+                    
+                    <div id="osAlert"></div>
+                    
+                    <form id="osForm">
+                    <div class="form-group">
+                        <label>Nome do Cliente *</label>
+                        <input type="text" class="form-control" id="nomeCliente" required>
                     </div>
+
+                    <div class="form-group">
+                        <label>Prazo de Entrega *</label>
+                        <input type="date" class="form-control" id="prazoEntrega" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Forma de Pagamento *</label>
+                        <input type="text" class="form-control" id="formaPagamento"
+                            placeholder="Ex: PIX, Dinheiro, Cartão de Crédito..." required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Desconto (%)</label>
+                        <input type="number" class="form-control" id="desconto" min="0" max="100" value="0" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Imagens (opcional)</label>
+                        <input type="file" id="imagens" multiple accept="image/*">
+                        <small>Você pode anexar várias imagens (anexos aparecerão abaixo da assinatura).</small>
+                    </div>
+
+                    <h4 style="margin: 25px 0 15px 0;">Itens do Serviço</h4>
+                    <div id="itensContainer"></div>
+
+                    <button type="button" class="btn-add" onclick="addItem()">+ Adicionar Item</button>
+
+                    <div style="margin-top: 30px;">
+                        <button type="submit" class="btn btn-primary">Gerar Ordem de Serviço</button>
+                    </div>
+                    </form>
                 </div>
+                </div>
+
 
                 <!-- TAB BANCO DE OS -->
                 <div id="banco" class="tab-content">
@@ -156,7 +151,9 @@
                             <input type="text" class="form-control" id="searchOS" placeholder="Buscar por nome do cliente...">
                         </div>
 
-                        <p>Lista de ordens de serviço aparecerá aqui...</p>
+                        <div id="osListTable">
+                            <p>Lista de ordens de serviço aparecerá aqui...</p>
+                        </div>
                     </div>
                 </div>
             </div>

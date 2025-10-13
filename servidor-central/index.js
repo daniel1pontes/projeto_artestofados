@@ -16,6 +16,23 @@ class ServidorCentral {
     this.geradorOS = new GeradorOS();
     this.planilhaService = new PlanilhaService();
     this.qrCodeData = null;
+    this.dataDir = path.join(__dirname, 'data');
+    this.osDir = path.join(this.dataDir, 'ordens_servico');
+  }
+
+  async setupDirectories() {
+    try {
+      // Criar diretórios necessários
+      await fs.mkdir(this.dataDir, { recursive: true });
+      await fs.mkdir(this.osDir, { recursive: true });
+      await fs.mkdir(path.join(this.dataDir, 'auth'), { recursive: true });
+      
+      logger.info('Diretórios criados/verificados:');
+      logger.info('- Data:', this.dataDir);
+      logger.info('- OS:', this.osDir);
+    } catch (error) {
+      logger.error('Erro ao criar diretórios:', error);
+    }
   }
 
   setupMiddlewares() {
@@ -29,8 +46,26 @@ class ServidorCentral {
     this.app.use(express.json({ limit: '50mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '50mb' }));
     
-    // Servir arquivos estáticos (OS PDFs)
-    this.app.use('/files/os', express.static(path.join(__dirname, 'data/ordens_servico')));
+    // Middleware de log para debugging
+    this.app.use('/files/os', (req, res, next) => {
+      logger.info(`Solicitando arquivo: ${req.url}`);
+      logger.info(`Caminho completo: ${path.join(this.osDir, req.url)}`);
+      next();
+    });
+    
+    // Servir arquivos estáticos (OS PDFs) com headers corretos
+    this.app.use('/files/os', express.static(this.osDir, {
+      setHeaders: (res, path) => {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline');
+      }
+    }));
+
+    // Middleware para logs de todas as requisições
+    this.app.use((req, res, next) => {
+      logger.info(`${req.method} ${req.url}`);
+      next();
+    });
   }
 
   setupRoutes() {
@@ -123,29 +158,6 @@ class ServidorCentral {
       }
     });
 
-    // Pausar bot
-    this.app.post('/api/bot/pause', (req, res) => {
-      try {
-        if (this.bot) {
-          // Implementar lógica de pausa se necessário
-          res.json({ 
-            success: true, 
-            message: 'Bot pausado' 
-          });
-        } else {
-          res.json({ 
-            success: false, 
-            message: 'Bot não está em execução' 
-          });
-        }
-      } catch (error) {
-        res.status(500).json({ 
-          success: false, 
-          message: error.message 
-        });
-      }
-    });
-
     // ==================== ATENDIMENTOS ====================
     
     // Listar atendimentos
@@ -172,13 +184,21 @@ class ServidorCentral {
     this.app.post('/api/os/criar', async (req, res) => {
       try {
         const dados = req.body;
+        logger.info('Dados recebidos para OS:', dados);
+        
         const resultado = await this.geradorOS.gerarOS(dados);
         
         logger.info(`OS criada: ${resultado.osId}`);
+        logger.info(`Arquivo: ${resultado.fileName}`);
+        
+        // Verificar se arquivo existe
+        const fileExists = await fs.access(resultado.filePath).then(() => true).catch(() => false);
+        logger.info(`Arquivo existe: ${fileExists}`);
         
         res.json({
           success: true,
           osId: resultado.osId,
+          fileName: resultado.fileName,
           filePath: resultado.filePath,
           downloadUrl: `/files/os/OS_${resultado.osId}.pdf`,
           valorTotal: resultado.valorTotal
@@ -198,10 +218,16 @@ class ServidorCentral {
         const lista = await this.geradorOS.listarOS();
         
         // Adicionar URL de download para cada OS
-        const listaComUrls = lista.map(os => ({
-          ...os,
-          downloadUrl: `/files/os/${os.arquivo}`,
-          previewUrl: `/api/os/preview/${os.osId}`
+        const listaComUrls = await Promise.all(lista.map(async os => {
+          const filePath = path.join(this.osDir, os.arquivo);
+          const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
+          
+          return {
+            ...os,
+            downloadUrl: `/files/os/${os.arquivo}`,
+            previewUrl: `/api/os/preview/${os.osId}`,
+            fileExists
+          };
         }));
 
         res.json({
@@ -244,16 +270,26 @@ class ServidorCentral {
         const osId = req.params.id;
         const filePath = await this.geradorOS.buscarOS(osId);
         
+        logger.info(`Download solicitado para OS ${osId}: ${filePath}`);
+        
+        // Verificar se arquivo existe
+        await fs.access(filePath);
+        
         res.download(filePath, `OS_${osId}.pdf`, (err) => {
           if (err) {
             logger.error('Erro ao fazer download:', err);
-            res.status(500).json({
-              success: false,
-              message: 'Erro ao baixar arquivo'
-            });
+            if (!res.headersSent) {
+              res.status(500).json({
+                success: false,
+                message: 'Erro ao baixar arquivo'
+              });
+            }
+          } else {
+            logger.info(`Download concluído: OS_${osId}.pdf`);
           }
         });
       } catch (error) {
+        logger.error('Erro no download:', error);
         res.status(404).json({
           success: false,
           message: 'Arquivo não encontrado'
@@ -289,10 +325,7 @@ class ServidorCentral {
     this.app.delete('/api/os/deletar/:id', async (req, res) => {
       try {
         const osId = req.params.id;
-        const filePath = await this.geradorOS.buscarOS(osId);
-        
-        await fs.unlink(filePath);
-        logger.info(`OS deletada: ${osId}`);
+        await this.geradorOS.deletarOS(osId);
         
         res.json({
           success: true,
@@ -300,6 +333,36 @@ class ServidorCentral {
         });
       } catch (error) {
         logger.error('Erro ao deletar OS:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message
+        });
+      }
+    });
+
+    // ==================== TESTE DE ARQUIVOS ====================
+    
+    // Endpoint para listar arquivos no diretório OS
+    this.app.get('/api/debug/files', async (req, res) => {
+      try {
+        const files = await fs.readdir(this.osDir);
+        const fileDetails = await Promise.all(files.map(async file => {
+          const filePath = path.join(this.osDir, file);
+          const stats = await fs.stat(filePath);
+          return {
+            name: file,
+            size: stats.size,
+            created: stats.birthtime,
+            modified: stats.mtime
+          };
+        }));
+        
+        res.json({
+          success: true,
+          directory: this.osDir,
+          files: fileDetails
+        });
+      } catch (error) {
         res.status(500).json({
           success: false,
           message: error.message
@@ -352,14 +415,34 @@ class ServidorCentral {
           bot: '/api/bot/*',
           os: '/api/os/*',
           atendimentos: '/api/atendimentos',
-          estatisticas: '/api/estatisticas'
+          estatisticas: '/api/estatisticas',
+          files: '/files/os/*'
         }
+      });
+    });
+
+    // Middleware de erro 404
+    this.app.use((req, res) => {
+      logger.warn(`404 - Rota não encontrada: ${req.method} ${req.url}`);
+      res.status(404).json({
+        success: false,
+        message: 'Endpoint não encontrado'
+      });
+    });
+
+    // Middleware de tratamento de erros
+    this.app.use((error, req, res, next) => {
+      logger.error('Erro não tratado:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor'
       });
     });
   }
 
   async start() {
     try {
+      await this.setupDirectories();
       this.setupMiddlewares();
       this.setupRoutes();
 
@@ -368,6 +451,7 @@ class ServidorCentral {
         logger.info(`🚀 SERVIDOR CENTRAL ARTESTOFADOS`);
         logger.info(`📡 Porta: ${this.port}`);
         logger.info(`🌐 Acessível em: http://0.0.0.0:${this.port}`);
+        logger.info(`📁 Diretório OS: ${this.osDir}`);
         logger.info('═══════════════════════════════════════════');
       });
 
@@ -375,16 +459,41 @@ class ServidorCentral {
       logger.info('🤖 Inicializando WhatsApp Bot...');
       const onQRCodeUpdate = (qrCode) => {
         this.qrCodeData = qrCode;
-        logger.info('QR Code atualizado');
+        if (qrCode) {
+          logger.info('📱 QR Code gerado e disponível');
+        } else {
+          logger.info('✅ QR Code removido - Bot conectado');
+        }
       };
       
-      this.bot = new WhatsAppBot(onQRCodeUpdate);
-      await this.bot.initialize();
+      try {
+        this.bot = new WhatsAppBot(onQRCodeUpdate);
+        await this.bot.initialize();
+      } catch (error) {
+        logger.warn('Bot WhatsApp não pôde ser iniciado:', error.message);
+        logger.info('Sistema funcionará sem bot WhatsApp');
+      }
 
     } catch (error) {
       logger.error('Erro ao iniciar servidor:', error);
       process.exit(1);
     }
+  }
+
+  async shutdown() {
+    logger.info('Iniciando shutdown do servidor...');
+    
+    if (this.bot) {
+      try {
+        this.bot.destroy();
+        logger.info('Bot WhatsApp desconectado');
+      } catch (error) {
+        logger.error('Erro ao desconectar bot:', error);
+      }
+    }
+    
+    logger.info('Servidor encerrado');
+    process.exit(0);
   }
 }
 
@@ -392,12 +501,30 @@ class ServidorCentral {
 const servidor = new ServidorCentral();
 
 // Tratamento de sinais
-process.on('SIGINT', () => servidor.shutdown());
-process.on('SIGTERM', () => servidor.shutdown());
+process.on('SIGINT', () => {
+  logger.info('Recebido SIGINT');
+  servidor.shutdown();
+});
 
-// Iniciar
+process.on('SIGTERM', () => {
+  logger.info('Recebido SIGTERM');  
+  servidor.shutdown();
+});
+
+// Tratamento de erros não capturados
+process.on('uncaughtException', (error) => {
+  logger.error('Erro não capturado:', error);
+  servidor.shutdown();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Promise rejeitada não tratada:', reason);
+  // Não fazer shutdown automático para promises rejeitadas
+});
+
+// Iniciar servidor
 servidor.start().catch(error => {
-  logger.error('Falha fatal:', error);
+  logger.error('Falha fatal ao iniciar servidor:', error);
   process.exit(1);
 });
 

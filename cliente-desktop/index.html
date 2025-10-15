@@ -64,15 +64,35 @@
             <div class="content">
                 <!-- TAB CHATBOT -->
                 <div id="chatbot" class="tab-content active">
+                    <!-- ALERT AREA -->
+                    <div id="chatbotAlert"></div>
+
+                    <!-- STATUS CARD -->
                     <div class="status-card">
                         <h3>
-                            <span class="status-indicator online" id="botStatus"></span>
+                            <span class="status-indicator offline" id="botStatus"></span>
                             Status do Bot
                         </h3>
-                        <p id="botStatusText">Bot ativo e conectado</p>
+                        <p id="botStatusText">Bot desconectado</p>
+                        
+                        <!-- BOTÃO DE CONECTAR (Visível inicialmente) -->
                         <div class="button-group">
-                            <button class="btn btn-primary" onclick="startBot()">Conectar WhatsApp</button>
-                            <button class="btn btn-danger" onclick="stopBot()">Desconectar</button>
+                            <button id="connectWhatsAppBtn" class="btn btn-success" onclick="connectWhatsApp()">
+                                📱 Conectar ao WhatsApp
+                            </button>
+                        </div>
+
+                        <!-- BOTÕES DE CONTROLE (Escondidos inicialmente) -->
+                        <div id="botControlButtons" class="button-group" style="display: none;">
+                            <button class="btn btn-primary" onclick="resumeBot()">
+                                ▶️ Retomar Bot
+                            </button>
+                            <button class="btn btn-warning" onclick="pauseBot()">
+                                ⏸️ Pausar Bot
+                            </button>
+                            <button class="btn btn-danger" onclick="disconnectBot()">
+                                🔌 Desconectar
+                            </button>
                         </div>
                     </div>
 
@@ -85,6 +105,7 @@
                         </div>
                     </div>
 
+                    <!-- ATENDIMENTOS -->
                     <div class="card">
                         <h3>📊 Atendimentos Registrados</h3>
                         <div id="atendimentosTable">
@@ -93,7 +114,6 @@
                     </div>
                 </div>
 
-                <!-- TAB GERADOR DE OS -->
                 <!-- TAB GERADOR DE OS -->
                 <div id="gerador" class="tab-content">
                 <div class="card">
@@ -144,7 +164,6 @@
                     </form>
                 </div>
                 </div>
-
 
                 <!-- TAB BANCO DE OS -->
                 <div id="banco" class="tab-content">

@@ -7,31 +7,171 @@ class MessageHandler {
     this.planilhaService = new PlanilhaService();
     this.calendarService = new CalendarService();
     this.userSessions = new Map();
+    this.pausedUsers = new Map(); // Armazena usuários pausados e tempo de retorno
   }
 
   async handle(message, client) {
-    const contact = await message.getContact();
-    const userId = contact.id._serialized;
-    const messageBody = message.body.trim();
+    try {
+      // ==================== REGRA 1: IGNORAR GRUPOS ====================
+      const chat = await message.getChat();
+      if (chat.isGroup) {
+        logger.info(`Mensagem de grupo ignorada: ${chat.name}`);
+        return; // Não responde grupos
+      }
 
-    logger.info(`Mensagem recebida de ${contact.name || contact.pushname}: ${messageBody}`);
+      const contact = await message.getContact();
+      const userId = contact.id._serialized;
+      const messageBody = message.body.trim();
 
-    let session = this.userSessions.get(userId);
+      logger.info(`Mensagem recebida de ${contact.name || contact.pushname}: ${messageBody}`);
 
-    if (!session) {
-      session = {
-        step: 'inicio',
-        data: {
-          nome: contact.name || contact.pushname,
-          telefone: contact.number,
-          dataAtendimento: new Date().toISOString()
+      // ==================== REGRA 2: VERIFICAR SE ADMIN ENVIOU MENSAGEM ====================
+      // Se a mensagem FOI enviada pelo bot/admin (fromMe = true)
+      // Significa que o admin está conversando manualmente
+      if (message.fromMe) {
+        // Pausar bot para este cliente por 2 horas
+        this.pauseUserBot(userId, contact.name || contact.pushname);
+        
+        logger.info(`👤 Admin respondeu no chat com ${contact.name}. Bot pausado por 2h.`);
+        
+        // Não envia mensagem automática, pois o admin está conversando
+        return;
+      }
+
+      // ==================== VERIFICAR SE USUÁRIO ESTÁ PAUSADO ====================
+      if (this.isUserPaused(userId)) {
+        const remainingTime = this.getRemainingPauseTime(userId);
+        logger.info(`Usuário ${contact.name} está pausado. Tempo restante: ${remainingTime} minutos`);
+        
+        // Não responde enquanto pausado (admin está conversando)
+        return;
+      }
+
+      // Se chegou aqui, é mensagem do cliente e bot NÃO está pausado
+      let session = this.userSessions.get(userId);
+
+      if (!session) {
+        session = {
+          step: 'inicio',
+          data: {
+            nome: contact.name || contact.pushname,
+            telefone: contact.number,
+            dataAtendimento: new Date().toISOString()
+          }
+        };
+        this.userSessions.set(userId, session);
+      }
+
+      // ==================== COMANDOS ESPECIAIS ====================
+      if (messageBody.toLowerCase() === '#ativar') {
+        const resumed = this.resumeUserBot(userId);
+        if (resumed) {
+          await message.reply(`✅ Bot reativado com sucesso!
+
+O atendimento automático está funcionando novamente.`);
+        } else {
+          await message.reply(`ℹ️ O bot já está ativo para este chat.`);
         }
-      };
-      this.userSessions.set(userId, session);
+        return;
+      }
+
+      // Processar normalmente
+      await this.processStep(message, session, client);
+
+    } catch (error) {
+      logger.error('Erro ao processar mensagem:', error);
+    }
+  }
+
+  // ==================== MÉTODOS DE CONTROLE DE PAUSA ====================
+
+  pauseUserBot(userId, userName) {
+    const pauseUntil = new Date();
+    pauseUntil.setHours(pauseUntil.getHours() + 2); // Pausa por 2 horas
+
+    this.pausedUsers.set(userId, {
+      pausedAt: new Date(),
+      pauseUntil: pauseUntil,
+      userName: userName
+    });
+
+    logger.info(`🛑 Bot pausado para ${userName} até ${pauseUntil.toLocaleString('pt-BR')}`);
+  }
+
+  resumeUserBot(userId) {
+    if (this.pausedUsers.has(userId)) {
+      const userData = this.pausedUsers.get(userId);
+      this.pausedUsers.delete(userId);
+      logger.info(`▶️ Bot reativado manualmente para ${userData.userName}`);
+      return true;
+    }
+    return false;
+  }
+
+  isUserPaused(userId) {
+    if (!this.pausedUsers.has(userId)) {
+      return false;
     }
 
-    await this.processStep(message, session, client);
+    const pauseData = this.pausedUsers.get(userId);
+    const now = new Date();
+
+    // Verificar se o tempo de pausa já passou
+    if (now >= pauseData.pauseUntil) {
+      // Tempo de pausa expirou, remover da lista
+      this.pausedUsers.delete(userId);
+      logger.info(`⏰ Pausa expirou automaticamente para ${pauseData.userName}`);
+      return false;
+    }
+
+    return true;
   }
+
+  getRemainingPauseTime(userId) {
+    if (!this.pausedUsers.has(userId)) {
+      return 0;
+    }
+
+    const pauseData = this.pausedUsers.get(userId);
+    const now = new Date();
+    const remaining = pauseData.pauseUntil - now;
+    
+    return Math.ceil(remaining / (1000 * 60)); // Retorna minutos restantes
+  }
+
+  getResumeTime() {
+    const resumeTime = new Date();
+    resumeTime.setHours(resumeTime.getHours() + 2);
+    
+    return resumeTime.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // ==================== LIMPEZA AUTOMÁTICA ====================
+  
+  startAutoCleanup() {
+    // Limpar pausas expiradas a cada 10 minutos
+    setInterval(() => {
+      const now = new Date();
+      let cleaned = 0;
+
+      for (const [userId, pauseData] of this.pausedUsers.entries()) {
+        if (now >= pauseData.pauseUntil) {
+          this.pausedUsers.delete(userId);
+          cleaned++;
+          logger.info(`🧹 Limpeza automática: Pausa expirada para ${pauseData.userName}`);
+        }
+      }
+
+      if (cleaned > 0) {
+        logger.info(`🧹 Limpeza automática: ${cleaned} pausas expiradas removidas`);
+      }
+    }, 10 * 60 * 1000); // 10 minutos
+  }
+
+  // ==================== MÉTODOS DE PROCESSAMENTO DE FLUXO ====================
 
   async processStep(message, session, client) {
     const messageBody = message.body.trim();
@@ -214,6 +354,32 @@ Exemplo: 15/10/2025 14:30`);
 
   async handleFinalizado(message, session) {
     await this.handleInicio(message, session);
+  }
+
+  // ==================== MÉTODOS DE INFORMAÇÃO ====================
+
+  getPausedUsersCount() {
+    return this.pausedUsers.size;
+  }
+
+  getPausedUsersList() {
+    const list = [];
+    const now = new Date();
+
+    for (const [userId, pauseData] of this.pausedUsers.entries()) {
+      const remaining = pauseData.pauseUntil - now;
+      const minutesRemaining = Math.ceil(remaining / (1000 * 60));
+
+      list.push({
+        userId,
+        userName: pauseData.userName,
+        pausedAt: pauseData.pausedAt,
+        pauseUntil: pauseData.pauseUntil,
+        minutesRemaining: minutesRemaining > 0 ? minutesRemaining : 0
+      });
+    }
+
+    return list;
   }
 }
 

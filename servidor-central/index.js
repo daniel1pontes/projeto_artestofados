@@ -22,7 +22,6 @@ class ServidorCentral {
 
   async setupDirectories() {
     try {
-      // Criar diretórios necessários
       await fs.mkdir(this.dataDir, { recursive: true });
       await fs.mkdir(this.osDir, { recursive: true });
       await fs.mkdir(path.join(this.dataDir, 'auth'), { recursive: true });
@@ -36,7 +35,6 @@ class ServidorCentral {
   }
 
   setupMiddlewares() {
-    // CORS para permitir acesso de todos os clientes
     this.app.use(cors({
       origin: '*',
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -46,14 +44,12 @@ class ServidorCentral {
     this.app.use(express.json({ limit: '50mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '50mb' }));
     
-    // Middleware de log para debugging
     this.app.use('/files/os', (req, res, next) => {
       logger.info(`Solicitando arquivo: ${req.url}`);
       logger.info(`Caminho completo: ${path.join(this.osDir, req.url)}`);
       next();
     });
     
-    // Servir arquivos estáticos (OS PDFs) com headers corretos
     this.app.use('/files/os', express.static(this.osDir, {
       setHeaders: (res, path) => {
         res.setHeader('Content-Type', 'application/pdf');
@@ -61,7 +57,6 @@ class ServidorCentral {
       }
     }));
 
-    // Middleware para logs de todas as requisições
     this.app.use((req, res, next) => {
       logger.info(`${req.method} ${req.url}`);
       next();
@@ -71,7 +66,6 @@ class ServidorCentral {
   setupRoutes() {
     // ==================== BOT WHATSAPP ====================
     
-    // Obter status do bot
     this.app.get('/api/bot/status', (req, res) => {
       res.json({
         success: true,
@@ -100,30 +94,37 @@ class ServidorCentral {
     // Iniciar bot
     this.app.post('/api/bot/start', async (req, res) => {
       try {
-        if (!this.bot) {
-          // Callback para atualizar QR Code
-          const onQRCodeUpdate = (qrCode) => {
-            this.qrCodeData = qrCode;
-            logger.info('QR Code atualizado');
-          };
-
-          this.bot = new WhatsAppBot(onQRCodeUpdate);
-          await this.bot.initialize();
-          
-          logger.info('Bot iniciado via API');
-          res.json({ 
-            success: true, 
-            message: 'Bot iniciado com sucesso. Aguarde o QR Code aparecer na interface.' 
-          });
-        } else {
-          res.json({ 
-            success: false, 
-            message: 'Bot já está em execução' 
-          });
+        // Se já existe um bot, limpar sessão primeiro
+        if (this.bot) {
+          logger.info('Bot já existe, limpando sessão antiga...');
+          await this.bot.clearSession();
+          this.bot = null;
+          this.qrCodeData = null;
         }
+
+        // Callback para atualizar QR Code
+        const onQRCodeUpdate = (qrCode) => {
+          this.qrCodeData = qrCode;
+          if (qrCode) {
+            logger.info('QR Code atualizado');
+          } else {
+            logger.info('QR Code removido - Bot conectado');
+          }
+        };
+
+        // Criar novo bot
+        this.bot = new WhatsAppBot(onQRCodeUpdate);
+        await this.bot.initialize();
+        
+        logger.info('Bot iniciado via API - Nova sessão criada');
+        res.json({ 
+          success: true, 
+          message: 'Bot iniciado com sucesso. Aguarde o QR Code aparecer na interface.' 
+        });
       } catch (error) {
         logger.error('Erro ao iniciar bot:', error);
         this.qrCodeData = null;
+        this.bot = null;
         res.status(500).json({ 
           success: false, 
           message: error.message 
@@ -131,17 +132,19 @@ class ServidorCentral {
       }
     });
 
-    // Parar bot
-    this.app.post('/api/bot/stop', (req, res) => {
+    // Parar bot e limpar sessão
+    this.app.post('/api/bot/stop', async (req, res) => {
       try {
         if (this.bot) {
-          this.bot.destroy();
+          logger.info('Parando bot e limpando sessão...');
+          await this.bot.clearSession();
           this.bot = null;
           this.qrCodeData = null;
-          logger.info('Bot desconectado via API');
+          
+          logger.info('✅ Bot desconectado e sessão limpa via API');
           res.json({ 
             success: true, 
-            message: 'Bot desconectado com sucesso' 
+            message: 'Bot desconectado e sessão limpa com sucesso' 
           });
         } else {
           res.json({ 
@@ -160,7 +163,6 @@ class ServidorCentral {
 
     // ==================== ATENDIMENTOS ====================
     
-    // Listar atendimentos
     this.app.get('/api/atendimentos', async (req, res) => {
       try {
         const filtros = req.query;
@@ -180,7 +182,6 @@ class ServidorCentral {
 
     // ==================== ORDENS DE SERVIÇO ====================
     
-    // Criar nova OS
     this.app.post('/api/os/criar', async (req, res) => {
       try {
         const dados = req.body;
@@ -191,7 +192,6 @@ class ServidorCentral {
         logger.info(`OS criada: ${resultado.osId}`);
         logger.info(`Arquivo: ${resultado.fileName}`);
         
-        // Verificar se arquivo existe
         const fileExists = await fs.access(resultado.filePath).then(() => true).catch(() => false);
         logger.info(`Arquivo existe: ${fileExists}`);
         
@@ -212,12 +212,10 @@ class ServidorCentral {
       }
     });
 
-    // Listar todas OS
     this.app.get('/api/os/listar', async (req, res) => {
       try {
         const lista = await this.geradorOS.listarOS();
         
-        // Adicionar URL de download para cada OS
         const listaComUrls = await Promise.all(lista.map(async os => {
           const filePath = path.join(this.osDir, os.arquivo);
           const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
@@ -244,7 +242,6 @@ class ServidorCentral {
       }
     });
 
-    // Buscar OS por ID
     this.app.get('/api/os/buscar/:id', async (req, res) => {
       try {
         const osId = req.params.id;
@@ -264,7 +261,6 @@ class ServidorCentral {
       }
     });
 
-    // Baixar OS
     this.app.get('/api/os/download/:id', async (req, res) => {
       try {
         const osId = req.params.id;
@@ -272,7 +268,6 @@ class ServidorCentral {
         
         logger.info(`Download solicitado para OS ${osId}: ${filePath}`);
         
-        // Verificar se arquivo existe
         await fs.access(filePath);
         
         res.download(filePath, `OS_${osId}.pdf`, (err) => {
@@ -297,13 +292,11 @@ class ServidorCentral {
       }
     });
 
-    // Preview de OS (retorna dados sem download)
     this.app.get('/api/os/preview/:id', async (req, res) => {
       try {
         const osId = req.params.id;
         const filePath = await this.geradorOS.buscarOS(osId);
         
-        // Ler arquivo e enviar como base64 para preview
         const fileBuffer = await fs.readFile(filePath);
         const base64 = fileBuffer.toString('base64');
         
@@ -321,7 +314,6 @@ class ServidorCentral {
       }
     });
 
-    // Deletar OS
     this.app.delete('/api/os/deletar/:id', async (req, res) => {
       try {
         const osId = req.params.id;
@@ -340,9 +332,6 @@ class ServidorCentral {
       }
     });
 
-    // ==================== TESTE DE ARQUIVOS ====================
-    
-    // Endpoint para listar arquivos no diretório OS
     this.app.get('/api/debug/files', async (req, res) => {
       try {
         const files = await fs.readdir(this.osDir);
@@ -370,8 +359,6 @@ class ServidorCentral {
       }
     });
 
-    // ==================== ESTATÍSTICAS ====================
-    
     this.app.get('/api/estatisticas', async (req, res) => {
       try {
         const atendimentos = await this.planilhaService.getAtendimentos();
@@ -394,8 +381,6 @@ class ServidorCentral {
       }
     });
 
-    // ==================== HEALTH CHECK ====================
-    
     this.app.get('/api/health', (req, res) => {
       res.json({
         success: true,
@@ -405,7 +390,6 @@ class ServidorCentral {
       });
     });
 
-    // Rota raiz
     this.app.get('/', (req, res) => {
       res.json({
         message: 'Servidor Central Artestofados',
@@ -421,7 +405,6 @@ class ServidorCentral {
       });
     });
 
-    // Middleware de erro 404
     this.app.use((req, res) => {
       logger.warn(`404 - Rota não encontrada: ${req.method} ${req.url}`);
       res.status(404).json({
@@ -430,7 +413,6 @@ class ServidorCentral {
       });
     });
 
-    // Middleware de tratamento de erros
     this.app.use((error, req, res, next) => {
       logger.error('Erro não tratado:', error);
       res.status(500).json({
@@ -453,26 +435,10 @@ class ServidorCentral {
         logger.info(`🌐 Acessível em: http://0.0.0.0:${this.port}`);
         logger.info(`📁 Diretório OS: ${this.osDir}`);
         logger.info('═══════════════════════════════════════════');
+        logger.info('⚠️  Bot WhatsApp NÃO será iniciado automaticamente');
+        logger.info('💡 Use o botão "Conectar ao WhatsApp" na interface');
+        logger.info('═══════════════════════════════════════════');
       });
-
-      // Inicializar bot automaticamente com callback
-      logger.info('🤖 Inicializando WhatsApp Bot...');
-      const onQRCodeUpdate = (qrCode) => {
-        this.qrCodeData = qrCode;
-        if (qrCode) {
-          logger.info('📱 QR Code gerado e disponível');
-        } else {
-          logger.info('✅ QR Code removido - Bot conectado');
-        }
-      };
-      
-      try {
-        this.bot = new WhatsAppBot(onQRCodeUpdate);
-        await this.bot.initialize();
-      } catch (error) {
-        logger.warn('Bot WhatsApp não pôde ser iniciado:', error.message);
-        logger.info('Sistema funcionará sem bot WhatsApp');
-      }
 
     } catch (error) {
       logger.error('Erro ao iniciar servidor:', error);
@@ -485,8 +451,8 @@ class ServidorCentral {
     
     if (this.bot) {
       try {
-        this.bot.destroy();
-        logger.info('Bot WhatsApp desconectado');
+        await this.bot.clearSession();
+        logger.info('Bot WhatsApp desconectado e sessão limpa');
       } catch (error) {
         logger.error('Erro ao desconectar bot:', error);
       }
@@ -497,10 +463,8 @@ class ServidorCentral {
   }
 }
 
-// Instanciar e iniciar servidor
 const servidor = new ServidorCentral();
 
-// Tratamento de sinais
 process.on('SIGINT', () => {
   logger.info('Recebido SIGINT');
   servidor.shutdown();
@@ -511,7 +475,6 @@ process.on('SIGTERM', () => {
   servidor.shutdown();
 });
 
-// Tratamento de erros não capturados
 process.on('uncaughtException', (error) => {
   logger.error('Erro não capturado:', error);
   servidor.shutdown();
@@ -519,10 +482,8 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Promise rejeitada não tratada:', reason);
-  // Não fazer shutdown automático para promises rejeitadas
 });
 
-// Iniciar servidor
 servidor.start().catch(error => {
   logger.error('Falha fatal ao iniciar servidor:', error);
   process.exit(1);

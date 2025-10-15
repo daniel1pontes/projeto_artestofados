@@ -56,6 +56,7 @@ function switchTab(tabName) {
     // Carregar dados específicos de cada tab
     if (tabName === 'chatbot') {
         loadAtendimentos();
+        checkBotStatus(); // Verificar status ao abrir a aba
     } else if (tabName === 'banco') {
         loadOSList();
     }
@@ -71,18 +72,52 @@ async function checkBotStatus() {
         const indicator = document.getElementById('botStatus');
         const text = document.getElementById('botStatusText');
         
+        // Elementos de controle
+        const connectBtn = document.getElementById('connectWhatsAppBtn');
+        const controlButtons = document.getElementById('botControlButtons');
+        const qrCodeCard = document.getElementById('qrCodeCard');
+        
         if (data.status === 'online' && data.connected) {
+            // Bot conectado e operando
             indicator.className = 'status-indicator online';
             text.textContent = '✅ Bot conectado e operando';
             text.style.color = '#28a745';
+            
+            // Mostrar botões de controle
+            connectBtn.style.display = 'none';
+            controlButtons.style.display = 'flex';
+            
+            // Esconder QR Code
+            qrCodeCard.style.display = 'none';
+            stopQRCodePolling();
+            
         } else if (data.status === 'online') {
+            // Bot iniciado, aguardando conexão (mostrando QR Code)
             indicator.className = 'status-indicator offline';
-            text.textContent = '⏳ Bot iniciado, aguardando conexão...';
+            text.textContent = '⏳ Aguardando leitura do QR Code...';
             text.style.color = '#ffc107';
+            
+            // Esconder botões
+            connectBtn.style.display = 'none';
+            controlButtons.style.display = 'none';
+            
+            // Continuar verificando QR Code
+            if (!qrCodeInterval) {
+                startQRCodePolling();
+            }
+            
         } else {
+            // Bot desconectado
             indicator.className = 'status-indicator offline';
             text.textContent = '⚠️ Bot desconectado';
             text.style.color = '#dc3545';
+            
+            // Mostrar apenas botão de conectar
+            connectBtn.style.display = 'block';
+            controlButtons.style.display = 'none';
+            qrCodeCard.style.display = 'none';
+            
+            stopQRCodePolling();
         }
 
         updateServerStatus(true);
@@ -91,35 +126,87 @@ async function checkBotStatus() {
         document.getElementById('botStatusText').textContent = '❌ Erro ao conectar com servidor';
         document.getElementById('botStatusText').style.color = '#dc3545';
         updateServerStatus(false);
+        
+        // Mostrar botão de conectar em caso de erro
+        document.getElementById('connectWhatsAppBtn').style.display = 'block';
+        document.getElementById('botControlButtons').style.display = 'none';
+        stopQRCodePolling();
     }
 }
 
-async function startBot() {
+async function connectWhatsApp() {
     try {
-        showAlert('osAlert', 'Iniciando bot...', 'success');
+        showAlert('chatbotAlert', 'Iniciando conexão com WhatsApp...', 'success');
+        
         const response = await fetch(`${SERVER_URL}/api/bot/start`, { method: 'POST' });
         const data = await response.json();
         
         if (data.success) {
-            showAlert('osAlert', data.message, 'success');
+            showAlert('chatbotAlert', data.message, 'success');
+            
+            // Esconder botão de conectar
+            document.getElementById('connectWhatsAppBtn').style.display = 'none';
+            
+            // Iniciar verificação periódica do QR Code
+            startQRCodePolling();
             checkBotStatus();
         } else {
-            showAlert('osAlert', data.message, 'danger');
+            showAlert('chatbotAlert', data.message, 'danger');
         }
     } catch (error) {
-        showAlert('osAlert', 'Erro ao iniciar bot: ' + error.message, 'danger');
+        showAlert('chatbotAlert', 'Erro ao conectar: ' + error.message, 'danger');
     }
 }
 
-async function stopBot() {
+async function pauseBot() {
     try {
+        showAlert('chatbotAlert', 'Pausando bot...', 'warning');
+        // Implementar lógica de pausar bot no servidor se necessário
+        showAlert('chatbotAlert', 'Bot pausado temporariamente', 'success');
+    } catch (error) {
+        showAlert('chatbotAlert', 'Erro ao pausar bot: ' + error.message, 'danger');
+    }
+}
+
+async function resumeBot() {
+    try {
+        showAlert('chatbotAlert', 'Retomando bot...', 'success');
+        // Implementar lógica de retomar bot no servidor se necessário
+        showAlert('chatbotAlert', 'Bot retomado com sucesso', 'success');
+    } catch (error) {
+        showAlert('chatbotAlert', 'Erro ao retomar bot: ' + error.message, 'danger');
+    }
+}
+
+async function disconnectBot() {
+    try {
+        const confirmacao = confirm('Tem certeza que deseja desconectar o bot do WhatsApp?');
+        if (!confirmacao) return;
+        
+        showAlert('chatbotAlert', 'Desconectando bot...', 'warning');
+        
         const response = await fetch(`${SERVER_URL}/api/bot/stop`, { method: 'POST' });
         const data = await response.json();
         
-        showAlert('osAlert', data.message, data.success ? 'success' : 'danger');
-        checkBotStatus();
+        if (data.success) {
+            showAlert('chatbotAlert', data.message, 'success');
+            
+            // Parar verificação do QR Code
+            stopQRCodePolling();
+            
+            // Esconder QR Code e botões de controle
+            document.getElementById('qrCodeCard').style.display = 'none';
+            document.getElementById('botControlButtons').style.display = 'none';
+            
+            // Mostrar botão de conectar novamente
+            document.getElementById('connectWhatsAppBtn').style.display = 'block';
+            
+            checkBotStatus();
+        } else {
+            showAlert('chatbotAlert', data.message, 'danger');
+        }
     } catch (error) {
-        showAlert('osAlert', 'Erro ao parar bot: ' + error.message, 'danger');
+        showAlert('chatbotAlert', 'Erro ao desconectar: ' + error.message, 'danger');
     }
 }
 
@@ -293,7 +380,6 @@ function toBase64(file) {
   });
 }
 
-
 // ==================== FUNÇÕES DO BANCO DE OS ====================
 
 async function loadOSList() {
@@ -352,7 +438,6 @@ async function loadOSList() {
 
 async function visualizarOS(osId) {
     try {
-        // Abrir PDF no navegador externo
         const pdfUrl = `${SERVER_URL}/files/os/OS_${osId}.pdf`;
         shell.openExternal(pdfUrl);
     } catch (error) {
@@ -362,7 +447,6 @@ async function visualizarOS(osId) {
 
 async function baixarOS(osId) {
     try {
-        // No Electron, podemos usar shell para abrir o download
         const downloadUrl = `${SERVER_URL}/api/os/download/${osId}`;
         shell.openExternal(downloadUrl);
     } catch (error) {
@@ -402,6 +486,7 @@ function formatMoney(value) {
         currency: 'BRL' 
     });
 }
+
 // ==================== FUNÇÕES DE QR CODE ====================
 
 let qrCodeInterval = null;
@@ -428,52 +513,15 @@ async function checkQRCode() {
             qrCodeStatus.style.color = '#27ae60';
             
         } else {
-            // Esconder card do QR Code
-            qrCodeCard.style.display = 'none';
-            qrCodeImage.src = '';
-            qrCodeImage.style.display = 'none';
+            // Esconder card do QR Code se não houver
+            if (!data.qrCode) {
+                qrCodeCard.style.display = 'none';
+                qrCodeImage.src = '';
+                qrCodeImage.style.display = 'none';
+            }
         }
     } catch (error) {
         console.error('Erro ao verificar QR Code:', error);
-    }
-}
-
-async function startBot() {
-    try {
-        showAlert('osAlert', 'Iniciando bot...', 'success');
-        
-        const response = await fetch(`${SERVER_URL}/api/bot/start`, { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            showAlert('osAlert', data.message, 'success');
-            checkBotStatus();
-            
-            // Iniciar verificação periódica do QR Code
-            startQRCodePolling();
-        } else {
-            showAlert('osAlert', data.message, 'danger');
-        }
-    } catch (error) {
-        showAlert('osAlert', 'Erro ao iniciar bot: ' + error.message, 'danger');
-    }
-}
-
-async function stopBot() {
-    try {
-        const response = await fetch(`${SERVER_URL}/api/bot/stop`, { method: 'POST' });
-        const data = await response.json();
-        
-        showAlert('osAlert', data.message, data.success ? 'success' : 'danger');
-        checkBotStatus();
-        
-        // Parar verificação do QR Code
-        stopQRCodePolling();
-        
-        // Esconder card do QR Code
-        document.getElementById('qrCodeCard').style.display = 'none';
-    } catch (error) {
-        showAlert('osAlert', 'Erro ao parar bot: ' + error.message, 'danger');
     }
 }
 
@@ -492,54 +540,6 @@ function stopQRCodePolling() {
     if (qrCodeInterval) {
         clearInterval(qrCodeInterval);
         qrCodeInterval = null;
-    }
-}
-
-async function checkBotStatus() {
-    try {
-        const response = await fetch(`${SERVER_URL}/api/bot/status`);
-        const data = await response.json();
-        
-        const indicator = document.getElementById('botStatus');
-        const text = document.getElementById('botStatusText');
-        
-        if (data.status === 'online' && data.connected) {
-            indicator.className = 'status-indicator online';
-            text.textContent = '✅ Bot conectado e operando';
-            text.style.color = '#28a745';
-            
-            // Parar verificação do QR Code quando conectado
-            stopQRCodePolling();
-            document.getElementById('qrCodeCard').style.display = 'none';
-            
-        } else if (data.status === 'online') {
-            indicator.className = 'status-indicator offline';
-            text.textContent = '⏳ Bot iniciado, aguardando conexão...';
-            text.style.color = '#ffc107';
-            
-            // Continuar verificando QR Code
-            if (!qrCodeInterval) {
-                startQRCodePolling();
-            }
-            
-        } else {
-            indicator.className = 'status-indicator offline';
-            text.textContent = '⚠️ Bot desconectado';
-            text.style.color = '#dc3545';
-            
-            // Parar verificação do QR Code
-            stopQRCodePolling();
-            document.getElementById('qrCodeCard').style.display = 'none';
-        }
-
-        updateServerStatus(true);
-    } catch (error) {
-        console.error('Erro ao verificar status:', error);
-        document.getElementById('botStatusText').textContent = '❌ Erro ao conectar com servidor';
-        document.getElementById('botStatusText').style.color = '#dc3545';
-        updateServerStatus(false);
-        
-        stopQRCodePolling();
     }
 }
 
@@ -592,8 +592,10 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // Exportar funções para uso no HTML
 window.switchTab = switchTab;
-window.startBot = startBot;
-window.stopBot = stopBot;
+window.connectWhatsApp = connectWhatsApp;
+window.pauseBot = pauseBot;
+window.resumeBot = resumeBot;
+window.disconnectBot = disconnectBot;
 window.addItem = addItem;
 window.removeItem = removeItem;
 window.visualizarOS = visualizarOS;

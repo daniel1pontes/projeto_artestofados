@@ -187,9 +187,9 @@ class MessageHandler {
   async handleInicio(session, client, userId) {
     const menuMessage = `Olá ${session.data.nome}! 👋
 
-Bem-vindo(a) à *Artestofados*! 🛋️
+    Bem-vindo(a) à *Artestofados*, somos especializados em fabricação e reformas de.
 
-Como posso ajudá-lo(a) hoje?`;
+    Como posso ajudá-lo(a) hoje?`;
 
     // Enviar lista interativa de opções
     const optionList = {

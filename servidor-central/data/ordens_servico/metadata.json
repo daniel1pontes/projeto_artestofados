@@ -70,5 +70,13 @@
     "dataCriacao": "2025-10-16T17:24:15.771Z",
     "prazoEntrega": "1000-11-10",
     "formaPagamento": "pix"
+  },
+  {
+    "osId": "DAS1760646141758",
+    "cliente": "dasddsa",
+    "valorTotal": 91494.28,
+    "dataCriacao": "2025-10-16T20:22:21.792Z",
+    "prazoEntrega": "4212-03-12",
+    "formaPagamento": "sdadasd"
   }
 ]

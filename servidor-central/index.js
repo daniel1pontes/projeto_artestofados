@@ -105,7 +105,7 @@ class ServidorCentral {
         this.bot = new WhatsAppBot(onQRCodeUpdate);
         await this.bot.initialize();
         
-        const webhookUrl = `${process.env.SERVER_URL || 'http://127.0.0.1:4040 '}/api/bot/webhook`;
+        const webhookUrl = `${process.env.SERVER_URL || 'http://177.35.39.181:4000 '}/api/bot/webhook`;
         await this.bot.setupWebhook(webhookUrl);
         
         logger.info('Bot iniciado via API - Nova sessão criada');
@@ -156,20 +156,32 @@ class ServidorCentral {
     
     this.app.post('/api/bot/webhook', async (req, res) => {
       try {
-        logger.info('Webhook recebido da Z-API');
+        logger.info('📥 Webhook recebido da Z-API');
+        logger.info('📄 Dados recebidos:', JSON.stringify(req.body, null, 2));
         
         if (!this.bot) {
+          logger.warn('⚠️ Bot não está ativo, ignorando webhook');
           return res.status(200).json({ 
             success: false, 
             message: 'Bot não está ativo' 
           });
         }
 
+        // Verificar se é uma mensagem válida
+        if (!req.body.phone || !req.body.text?.message) {
+          logger.warn('⚠️ Webhook inválido - dados incompletos');
+          return res.status(200).json({ 
+            success: false, 
+            message: 'Dados de webhook inválidos' 
+          });
+        }
+
         await this.bot.handleWebhookMessage(req.body);
+        logger.info('✅ Webhook processado com sucesso');
         
         res.status(200).json({ success: true });
       } catch (error) {
-        logger.error('Erro ao processar webhook:', error);
+        logger.error('❌ Erro ao processar webhook:', error);
         res.status(200).json({ success: false });
       }
     });

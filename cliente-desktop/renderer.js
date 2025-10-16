@@ -1,3 +1,4 @@
+// cliente-desktop/renderer.js - VERSÃO COMPLETA COM Z-API
 const { ipcRenderer, shell } = require('electron');
 
 let SERVER_URL = 'http://localhost:4000';
@@ -32,18 +33,14 @@ function updateServerStatus(connected) {
 // ==================== NAVEGAÇÃO DE TABS ====================
 
 function switchTab(tabName) {
-    // Remover classe active de todos os conteúdos e botões
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
     document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
     
-    // Adicionar classe active ao tab selecionado
     document.getElementById(tabName).classList.add('active');
     
-    // Encontrar e ativar o botão correto baseado no evento
     if (event && event.currentTarget) {
         event.currentTarget.classList.add('active');
     } else {
-        // Fallback: encontrar pelo onclick
         const buttons = document.querySelectorAll('.nav-button');
         buttons.forEach(btn => {
             const onclickStr = btn.getAttribute('onclick');
@@ -53,10 +50,10 @@ function switchTab(tabName) {
         });
     }
 
-    // Carregar dados específicos de cada tab
     if (tabName === 'chatbot') {
         loadAtendimentos();
-        checkBotStatus(); // Verificar status ao abrir a aba
+        checkBotStatus();
+        loadPausedUsers();
     } else if (tabName === 'banco') {
         loadOSList();
     }
@@ -71,8 +68,6 @@ async function checkBotStatus() {
         
         const indicator = document.getElementById('botStatus');
         const text = document.getElementById('botStatusText');
-        
-        // Elementos de controle
         const connectBtn = document.getElementById('connectWhatsAppBtn');
         const controlButtons = document.getElementById('botControlButtons');
         const qrCodeCard = document.getElementById('qrCodeCard');
@@ -83,13 +78,12 @@ async function checkBotStatus() {
             text.textContent = '✅ Bot conectado e operando';
             text.style.color = '#28a745';
             
-            // Mostrar botões de controle
             connectBtn.style.display = 'none';
             controlButtons.style.display = 'flex';
-            
-            // Esconder QR Code
             qrCodeCard.style.display = 'none';
+            
             stopQRCodePolling();
+            loadPausedUsers();
             
         } else if (data.status === 'online') {
             // Bot iniciado, aguardando conexão (mostrando QR Code)
@@ -97,11 +91,9 @@ async function checkBotStatus() {
             text.textContent = '⏳ Aguardando leitura do QR Code...';
             text.style.color = '#ffc107';
             
-            // Esconder botões
             connectBtn.style.display = 'none';
             controlButtons.style.display = 'none';
             
-            // Continuar verificando QR Code
             if (!qrCodeInterval) {
                 startQRCodePolling();
             }
@@ -112,7 +104,6 @@ async function checkBotStatus() {
             text.textContent = '⚠️ Bot desconectado';
             text.style.color = '#dc3545';
             
-            // Mostrar apenas botão de conectar
             connectBtn.style.display = 'block';
             controlButtons.style.display = 'none';
             qrCodeCard.style.display = 'none';
@@ -127,7 +118,6 @@ async function checkBotStatus() {
         document.getElementById('botStatusText').style.color = '#dc3545';
         updateServerStatus(false);
         
-        // Mostrar botão de conectar em caso de erro
         document.getElementById('connectWhatsAppBtn').style.display = 'block';
         document.getElementById('botControlButtons').style.display = 'none';
         stopQRCodePolling();
@@ -136,7 +126,7 @@ async function checkBotStatus() {
 
 async function connectWhatsApp() {
     try {
-        showAlert('chatbotAlert', 'Iniciando conexão com WhatsApp...', 'success');
+        showAlert('chatbotAlert', 'Iniciando conexão com WhatsApp via Z-API...', 'success');
         
         const response = await fetch(`${SERVER_URL}/api/bot/start`, { method: 'POST' });
         const data = await response.json();
@@ -144,10 +134,8 @@ async function connectWhatsApp() {
         if (data.success) {
             showAlert('chatbotAlert', data.message, 'success');
             
-            // Esconder botão de conectar
             document.getElementById('connectWhatsAppBtn').style.display = 'none';
             
-            // Iniciar verificação periódica do QR Code
             startQRCodePolling();
             checkBotStatus();
         } else {
@@ -158,29 +146,18 @@ async function connectWhatsApp() {
     }
 }
 
-async function pauseBot() {
-    try {
-        showAlert('chatbotAlert', 'Pausando bot...', 'warning');
-        // Implementar lógica de pausar bot no servidor se necessário
-        showAlert('chatbotAlert', 'Bot pausado temporariamente', 'success');
-    } catch (error) {
-        showAlert('chatbotAlert', 'Erro ao pausar bot: ' + error.message, 'danger');
-    }
-}
-
-async function resumeBot() {
-    try {
-        showAlert('chatbotAlert', 'Retomando bot...', 'success');
-        // Implementar lógica de retomar bot no servidor se necessário
-        showAlert('chatbotAlert', 'Bot retomado com sucesso', 'success');
-    } catch (error) {
-        showAlert('chatbotAlert', 'Erro ao retomar bot: ' + error.message, 'danger');
-    }
-}
-
 async function disconnectBot() {
     try {
-        const confirmacao = confirm('Tem certeza que deseja desconectar o bot do WhatsApp?');
+        const confirmacao = confirm(
+            '⚠️ DESCONECTAR BOT DO WHATSAPP\n\n' +
+            'Isso irá:\n' +
+            '• Desconectar completamente do WhatsApp\n' +
+            '• Parar de responder TODAS as mensagens\n' +
+            '• Limpar a sessão atual\n\n' +
+            'Você precisará escanear o QR Code novamente.\n\n' +
+            'Tem certeza?'
+        );
+        
         if (!confirmacao) return;
         
         showAlert('chatbotAlert', 'Desconectando bot...', 'warning');
@@ -189,24 +166,27 @@ async function disconnectBot() {
         const data = await response.json();
         
         if (data.success) {
-            showAlert('chatbotAlert', data.message, 'success');
+            showAlert('chatbotAlert', '🔌 ' + data.message, 'success');
             
-            // Parar verificação do QR Code
             stopQRCodePolling();
             
-            // Esconder QR Code e botões de controle
             document.getElementById('qrCodeCard').style.display = 'none';
             document.getElementById('botControlButtons').style.display = 'none';
-            
-            // Mostrar botão de conectar novamente
             document.getElementById('connectWhatsAppBtn').style.display = 'block';
+            
+            if (document.getElementById('pausedUsersTable')) {
+                document.getElementById('pausedUsersTable').innerHTML = `
+                    <p style="text-align: center; padding: 20px; color: #6c757d;">
+                        Bot desconectado
+                    </p>`;
+            }
             
             checkBotStatus();
         } else {
-            showAlert('chatbotAlert', data.message, 'danger');
+            showAlert('chatbotAlert', '⚠️ ' + data.message, 'danger');
         }
     } catch (error) {
-        showAlert('chatbotAlert', 'Erro ao desconectar: ' + error.message, 'danger');
+        showAlert('chatbotAlert', '❌ Erro ao desconectar: ' + error.message, 'danger');
     }
 }
 
@@ -257,6 +237,240 @@ async function loadAtendimentos() {
                 Erro ao conectar com o servidor
             </p>`;
     }
+}
+
+// ==================== FUNÇÕES DE QR CODE ====================
+
+let qrCodeInterval = null;
+
+async function checkQRCode() {
+    try {
+        console.log('🔍 Verificando QR Code...');
+        
+        const response = await fetch(`${SERVER_URL}/api/bot/qrcode`);
+        const data = await response.json();
+
+        const qrCodeCard = document.getElementById('qrCodeCard');
+        const qrCodeImage = document.getElementById('qrCodeImage');
+        const qrCodeStatus = document.getElementById('qrCodeStatus');
+
+        if (data.success && data.qrCode) {
+            console.log('✅ QR Code disponível!');
+            
+            qrCodeCard.style.display = 'block';
+            qrCodeImage.src = data.qrCode;
+            qrCodeImage.style.display = 'block';
+            qrCodeStatus.textContent = '📱 QR Code disponível! Escaneie com seu WhatsApp.';
+            qrCodeStatus.style.color = '#27ae60';
+            qrCodeStatus.style.fontWeight = 'bold';
+            
+        } else {
+            console.log('⏳ QR Code ainda não disponível...');
+            
+            if (qrCodeCard.style.display !== 'none') {
+                qrCodeStatus.textContent = '⏳ Aguardando geração do QR Code...';
+                qrCodeStatus.style.color = '#ffc107';
+            }
+        }
+    } catch (error) {
+        console.error('❌ Erro ao verificar QR Code:', error);
+    }
+}
+
+function startQRCodePolling() {
+    console.log('🚀 Iniciando polling do QR Code...');
+    
+    stopQRCodePolling();
+    
+    const qrCodeCard = document.getElementById('qrCodeCard');
+    qrCodeCard.style.display = 'block';
+    
+    document.getElementById('qrCodeStatus').textContent = '⏳ Conectando ao Z-API...';
+    document.getElementById('qrCodeStatus').style.color = '#ffc107';
+    
+    checkQRCode();
+    
+    qrCodeInterval = setInterval(() => {
+        checkQRCode();
+        checkBotStatus();
+    }, 3000);
+    
+    console.log('✅ Polling do QR Code iniciado (a cada 3 segundos)');
+}
+
+function stopQRCodePolling() {
+    if (qrCodeInterval) {
+        console.log('⏹️ Parando polling do QR Code');
+        clearInterval(qrCodeInterval);
+        qrCodeInterval = null;
+    }
+}
+
+// ==================== FUNÇÕES DE USUÁRIOS PAUSADOS ====================
+
+async function loadPausedUsers() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/bot/paused-users`);
+        const data = await response.json();
+        
+        const container = document.getElementById('pausedUsersTable');
+        
+        if (!container) {
+            console.warn('Elemento pausedUsersTable não encontrado');
+            return;
+        }
+        
+        if (data.success && data.pausedUsers && data.pausedUsers.length > 0) {
+            let html = `
+                <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">
+                    <strong>ℹ️ Informação:</strong> Estes usuários têm o bot pausado porque você respondeu manualmente no WhatsApp.
+                </div>
+                <table class="table" style="margin-top: 15px;">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Telefone</th>
+                            <th>Pausado há</th>
+                            <th>Retoma em</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            data.pausedUsers.forEach(user => {
+                const pausedAt = new Date(user.pausedAt).toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                const minutes = user.minutesRemaining;
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                
+                let timeRemaining = '';
+                if (hours > 0) {
+                    timeRemaining = `${hours}h ${mins}min`;
+                } else {
+                    timeRemaining = `${mins}min`;
+                }
+                
+                html += `
+                    <tr>
+                        <td><strong>${user.userName}</strong></td>
+                        <td><code>${user.userId}</code></td>
+                        <td>${pausedAt}</td>
+                        <td>
+                            <span style="color: ${minutes > 60 ? '#28a745' : '#ffc107'}; font-weight: bold;">
+                                ${timeRemaining}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-primary" 
+                                    onclick="reativarUsuario('${user.userId}', '${user.userName}')"
+                                    style="font-size: 0.85em; padding: 6px 12px;">
+                                ▶️ Reativar Agora
+                            </button>
+                        </td>
+                    </tr>`;
+            });
+            
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #6c757d;">
+                    <p style="font-size: 1.2em; margin-bottom: 10px;">✅ Nenhum usuário com bot pausado</p>
+                    <p style="font-size: 0.9em;">Quando você responder manualmente no WhatsApp, o cliente aparecerá aqui.</p>
+                </div>`;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar usuários pausados:', error);
+        const container = document.getElementById('pausedUsersTable');
+        if (container) {
+            container.innerHTML = `
+                <p style="text-align: center; padding: 20px; color: #dc3545;">
+                    ❌ Erro ao carregar lista de usuários
+                </p>`;
+        }
+    }
+}
+
+async function reativarUsuario(userId, userName) {
+    try {
+        const confirmacao = confirm(
+            `Reativar bot para ${userName}?\n\n` +
+            `O bot voltará a responder automaticamente as mensagens deste cliente.`
+        );
+        
+        if (!confirmacao) return;
+        
+        const response = await fetch(`${SERVER_URL}/api/bot/resume-user/${userId}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('chatbotAlert', `✅ Bot reativado para ${userName}!`, 'success');
+            loadPausedUsers();
+        } else {
+            showAlert('chatbotAlert', '⚠️ ' + data.message, 'warning');
+        }
+    } catch (error) {
+        showAlert('chatbotAlert', '❌ Erro: ' + error.message, 'danger');
+    }
+}
+
+function showPauseHelp() {
+    const helpMessage = `
+╔═══════════════════════════════════════════╗
+║  SISTEMA DE PAUSA AUTOMÁTICA              ║
+╚═══════════════════════════════════════════╝
+
+🔹 COMO FUNCIONA:
+
+1️⃣ Cliente envia mensagem
+   → Bot responde automaticamente
+
+2️⃣ VOCÊ responde manualmente no WhatsApp Web
+   → Bot PAUSA automaticamente por 2 horas
+   → Cliente aparece na lista acima
+
+3️⃣ Durante as 2 horas:
+   → Bot NÃO responde esse cliente
+   → Você pode conversar normalmente
+   → Outros clientes continuam sendo atendidos
+
+4️⃣ Após 2 horas:
+   → Bot volta a funcionar automaticamente
+   → Cliente sai da lista
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔹 REATIVAR ANTES DAS 2 HORAS:
+
+• Clique em "▶️ Reativar Agora" na lista
+• Bot volta a responder imediatamente
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔹 CLIENTE PODE REATIVAR:
+
+O cliente pode enviar: #ativar
+→ Bot volta a responder mesmo pausado
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ VANTAGENS:
+
+• Não precisa pausar o bot inteiro
+• Outros clientes continuam sendo atendidos
+• Você conversa livremente sem interferência
+• Controle total sobre cada cliente
+    `;
+    
+    alert(helpMessage);
 }
 
 // ==================== FUNÇÕES DO GERADOR DE OS ====================
@@ -313,7 +527,6 @@ function attachItemCalculation() {
     });
 }
 
-// Handler do formulário de OS
 document.addEventListener('DOMContentLoaded', () => {
   const osForm = document.getElementById('osForm');
   if (osForm) {
@@ -330,7 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const imagensInput = document.getElementById('imagens');
-      const imagens = [];
+      const imagens = [...imagensSelecionadas];
 
       for (const file of imagensInput.files) {
         const base64 = await toBase64(file);
@@ -359,6 +572,8 @@ document.addEventListener('DOMContentLoaded', () => {
           showAlert('osAlert', `✅ OS #${data.osId} gerada com sucesso! Valor: ${formatMoney(data.valorTotal)}`, 'success');
           osForm.reset();
           document.getElementById('itensContainer').innerHTML = '';
+          imagensSelecionadas = [];
+          document.getElementById('imagensPreview').innerHTML = '';
           addItem();
           loadOSList();
         } else {
@@ -379,6 +594,70 @@ function toBase64(file) {
     reader.onerror = reject;
   });
 }
+
+let imagensSelecionadas = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+  const imagensInput = document.getElementById('imagens');
+  const imagensPreview = document.getElementById('imagensPreview');
+
+  if (imagensInput) {
+    imagensInput.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      
+      for (const file of files) {
+        try {
+          const base64 = await toBase64(file);
+          
+          imagensSelecionadas.push({
+            nome: file.name,
+            data: base64
+          });
+
+          const previewItem = document.createElement('div');
+          previewItem.style.cssText = 'position: relative; width: 100px; height: 100px; border: 2px solid #ddd; border-radius: 5px; overflow: hidden;';
+          
+          const img = document.createElement('img');
+          img.src = base64;
+          img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+          
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = '×';
+          removeBtn.type = 'button';
+          removeBtn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: red; color: white; border: none; border-radius: 50%; width: 25px; height: 25px; cursor: pointer; font-size: 18px; line-height: 1;';
+          
+          const imagemIndex = imagensSelecionadas.length - 1;
+          removeBtn.onclick = () => {
+            imagensSelecionadas.splice(imagemIndex, 1);
+            previewItem.remove();
+            atualizarIndices();
+          };
+          
+          previewItem.appendChild(img);
+          previewItem.appendChild(removeBtn);
+          imagensPreview.appendChild(previewItem);
+          
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+        }
+      }
+      
+      imagensInput.value = '';
+    });
+  }
+
+  function atualizarIndices() {
+    const previews = imagensPreview.children;
+    for (let i = 0; i < previews.length; i++) {
+      const removeBtn = previews[i].querySelector('button');
+      removeBtn.onclick = () => {
+        imagensSelecionadas.splice(i, 1);
+        previews[i].remove();
+        atualizarIndices();
+      };
+    }
+  }
+});
 
 // ==================== FUNÇÕES DO BANCO DE OS ====================
 
@@ -454,7 +733,6 @@ async function baixarOS(osId) {
     }
 }
 
-// Busca de OS
 document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('searchOS');
     if (searchInput) {
@@ -487,85 +765,23 @@ function formatMoney(value) {
     });
 }
 
-// ==================== FUNÇÕES DE QR CODE ====================
-
-let qrCodeInterval = null;
-
-async function checkQRCode() {
-    try {
-        const response = await fetch(`${SERVER_URL}/api/bot/qrcode`);
-        const data = await response.json();
-
-        const qrCodeCard = document.getElementById('qrCodeCard');
-        const qrCodeImage = document.getElementById('qrCodeImage');
-        const qrCodeStatus = document.getElementById('qrCodeStatus');
-
-        if (data.success && data.qrCode) {
-            // Mostrar card do QR Code
-            qrCodeCard.style.display = 'block';
-            
-            // Atualizar imagem do QR Code
-            qrCodeImage.src = data.qrCode;
-            qrCodeImage.style.display = 'block';
-            
-            // Atualizar status
-            qrCodeStatus.textContent = '✅ QR Code disponível! Escaneie com seu WhatsApp.';
-            qrCodeStatus.style.color = '#27ae60';
-            
-        } else {
-            // Esconder card do QR Code se não houver
-            if (!data.qrCode) {
-                qrCodeCard.style.display = 'none';
-                qrCodeImage.src = '';
-                qrCodeImage.style.display = 'none';
-            }
-        }
-    } catch (error) {
-        console.error('Erro ao verificar QR Code:', error);
-    }
-}
-
-function startQRCodePolling() {
-    // Parar polling anterior se existir
-    stopQRCodePolling();
-    
-    // Verificar imediatamente
-    checkQRCode();
-    
-    // Verificar a cada 2 segundos
-    qrCodeInterval = setInterval(checkQRCode, 2000);
-}
-
-function stopQRCodePolling() {
-    if (qrCodeInterval) {
-        clearInterval(qrCodeInterval);
-        qrCodeInterval = null;
-    }
-}
-
 // ==================== INICIALIZAÇÃO ====================
 
-// Inicializar quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Aplicação iniciada');
+    console.log('🚀 Aplicação iniciada');
     
-    // Carregar configuração
     loadConfig().then(() => {
-        // Verificar status do bot
         checkBotStatus();
         setInterval(checkBotStatus, 10000);
         
-        // Inicializar cálculo de itens
-        attachItemCalculation();
+        setInterval(loadPausedUsers, 30000);
         
-        // Carregar dados iniciais
+        attachItemCalculation();
         loadAtendimentos();
     });
 });
 
-// Atalhos de teclado
 document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + 1/2/3 para trocar tabs
     if (e.ctrlKey || e.metaKey) {
         switch(e.key) {
             case '1':
@@ -581,7 +797,6 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Tratamento de erros global
 window.addEventListener('error', (e) => {
     console.error('Erro capturado:', e.error);
 });
@@ -593,10 +808,11 @@ window.addEventListener('unhandledrejection', (e) => {
 // Exportar funções para uso no HTML
 window.switchTab = switchTab;
 window.connectWhatsApp = connectWhatsApp;
-window.pauseBot = pauseBot;
-window.resumeBot = resumeBot;
 window.disconnectBot = disconnectBot;
 window.addItem = addItem;
 window.removeItem = removeItem;
 window.visualizarOS = visualizarOS;
 window.baixarOS = baixarOS;
+window.loadPausedUsers = loadPausedUsers;
+window.reativarUsuario = reativarUsuario;
+window.showPauseHelp = showPauseHelp;

@@ -1,3 +1,4 @@
+// servidor-central/index.js - VERSÃO COMPLETA COM Z-API
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -26,9 +27,7 @@ class ServidorCentral {
       await fs.mkdir(this.osDir, { recursive: true });
       await fs.mkdir(path.join(this.dataDir, 'auth'), { recursive: true });
       
-      logger.info('Diretórios criados/verificados:');
-      logger.info('- Data:', this.dataDir);
-      logger.info('- OS:', this.osDir);
+      logger.info('Diretórios criados/verificados');
     } catch (error) {
       logger.error('Erro ao criar diretórios:', error);
     }
@@ -44,12 +43,6 @@ class ServidorCentral {
     this.app.use(express.json({ limit: '50mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '50mb' }));
     
-    this.app.use('/files/os', (req, res, next) => {
-      logger.info(`Solicitando arquivo: ${req.url}`);
-      logger.info(`Caminho completo: ${path.join(this.osDir, req.url)}`);
-      next();
-    });
-    
     this.app.use('/files/os', express.static(this.osDir, {
       setHeaders: (res, path) => {
         res.setHeader('Content-Type', 'application/pdf');
@@ -64,7 +57,7 @@ class ServidorCentral {
   }
 
   setupRoutes() {
-    // ==================== BOT WHATSAPP ====================
+    // ==================== BOT WHATSAPP (Z-API) ====================
     
     this.app.get('/api/bot/status', (req, res) => {
       res.json({
@@ -91,10 +84,8 @@ class ServidorCentral {
       }
     });
 
-    // Iniciar bot
     this.app.post('/api/bot/start', async (req, res) => {
       try {
-        // Se já existe um bot, limpar sessão primeiro
         if (this.bot) {
           logger.info('Bot já existe, limpando sessão antiga...');
           await this.bot.clearSession();
@@ -102,7 +93,6 @@ class ServidorCentral {
           this.qrCodeData = null;
         }
 
-        // Callback para atualizar QR Code
         const onQRCodeUpdate = (qrCode) => {
           this.qrCodeData = qrCode;
           if (qrCode) {
@@ -112,9 +102,11 @@ class ServidorCentral {
           }
         };
 
-        // Criar novo bot
         this.bot = new WhatsAppBot(onQRCodeUpdate);
         await this.bot.initialize();
+        
+        const webhookUrl = `${process.env.SERVER_URL || 'http://127.0.0.1:4040 '}/api/bot/webhook`;
+        await this.bot.setupWebhook(webhookUrl);
         
         logger.info('Bot iniciado via API - Nova sessão criada');
         res.json({ 
@@ -132,7 +124,6 @@ class ServidorCentral {
       }
     });
 
-    // Parar bot e limpar sessão
     this.app.post('/api/bot/stop', async (req, res) => {
       try {
         if (this.bot) {
@@ -141,7 +132,7 @@ class ServidorCentral {
           this.bot = null;
           this.qrCodeData = null;
           
-          logger.info('✅ Bot desconectado e sessão limpa via API');
+          logger.info('Bot desconectado e sessão limpa via API');
           res.json({ 
             success: true, 
             message: 'Bot desconectado e sessão limpa com sucesso' 
@@ -154,6 +145,88 @@ class ServidorCentral {
         }
       } catch (error) {
         logger.error('Erro ao parar bot:', error);
+        res.status(500).json({ 
+          success: false, 
+          message: error.message 
+        });
+      }
+    });
+
+    // ==================== WEBHOOK Z-API ====================
+    
+    this.app.post('/api/bot/webhook', async (req, res) => {
+      try {
+        logger.info('Webhook recebido da Z-API');
+        
+        if (!this.bot) {
+          return res.status(200).json({ 
+            success: false, 
+            message: 'Bot não está ativo' 
+          });
+        }
+
+        await this.bot.handleWebhookMessage(req.body);
+        
+        res.status(200).json({ success: true });
+      } catch (error) {
+        logger.error('Erro ao processar webhook:', error);
+        res.status(200).json({ success: false });
+      }
+    });
+
+    // ==================== CONTROLE DE USUÁRIOS PAUSADOS ====================
+    
+    this.app.get('/api/bot/paused-users', (req, res) => {
+      try {
+        if (!this.bot) {
+          return res.json({ 
+            success: true, 
+            pausedUsers: [] 
+          });
+        }
+
+        const pausedUsers = this.bot.getPausedUsers();
+        
+        res.json({
+          success: true,
+          pausedUsers: pausedUsers,
+          total: pausedUsers.length
+        });
+      } catch (error) {
+        logger.error('Erro ao listar usuários pausados:', error);
+        res.status(500).json({ 
+          success: false, 
+          message: error.message 
+        });
+      }
+    });
+
+    this.app.post('/api/bot/resume-user/:userId', async (req, res) => {
+      try {
+        if (!this.bot) {
+          return res.json({ 
+            success: false, 
+            message: 'Bot não está conectado' 
+          });
+        }
+
+        const userId = req.params.userId;
+        const resumed = this.bot.messageHandler.resumeUserBot(userId);
+        
+        if (resumed) {
+          logger.info(`Bot reativado manualmente para usuário: ${userId}`);
+          res.json({ 
+            success: true, 
+            message: 'Bot reativado para este usuário' 
+          });
+        } else {
+          res.json({ 
+            success: false, 
+            message: 'Usuário não estava pausado' 
+          });
+        }
+      } catch (error) {
+        logger.error('Erro ao reativar usuário:', error);
         res.status(500).json({ 
           success: false, 
           message: error.message 
@@ -386,14 +459,14 @@ class ServidorCentral {
         success: true,
         status: 'online',
         timestamp: new Date().toISOString(),
-        version: '1.0.0'
+        version: '2.0.0'
       });
     });
 
     this.app.get('/', (req, res) => {
       res.json({
-        message: 'Servidor Central Artestofados',
-        version: '1.0.0',
+        message: 'Servidor Central Artestofados com Z-API',
+        version: '2.0.0',
         status: 'online',
         endpoints: {
           bot: '/api/bot/*',
@@ -435,7 +508,7 @@ class ServidorCentral {
         logger.info(`🌐 Acessível em: http://0.0.0.0:${this.port}`);
         logger.info(`📁 Diretório OS: ${this.osDir}`);
         logger.info('═══════════════════════════════════════════');
-        logger.info('⚠️  Bot WhatsApp NÃO será iniciado automaticamente');
+        logger.info('⚡ Bot WhatsApp via Z-API');
         logger.info('💡 Use o botão "Conectar ao WhatsApp" na interface');
         logger.info('═══════════════════════════════════════════');
       });

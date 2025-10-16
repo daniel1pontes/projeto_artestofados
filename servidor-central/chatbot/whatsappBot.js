@@ -1,42 +1,39 @@
-// servidor-central/chatbot/whatsappBot.js
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode');
+// servidor-central/chatbot/whatsappBot.js - VERSÃO CORRIGIDA
+const axios = require('axios');
 const MessageHandler = require('./messageHandler');
 const logger = require('../utils/logger');
-const fs = require('fs');
-const path = require('path');
 
 class WhatsAppBot {
   constructor(onQRCodeUpdate) {
-    this.client = null;
+    this.instanceId = process.env.ZAPI_INSTANCE_ID;
+    this.token = process.env.ZAPI_TOKEN;
+    this.clientToken = process.env.ZAPI_CLIENT_TOKEN;
+    this.baseUrl = `https://api.z-api.io/instances/${this.instanceId}/token/${this.token}`;
+    
     this.messageHandler = new MessageHandler();
     this.isReady = false;
     this.onQRCodeUpdate = onQRCodeUpdate;
-    this.authPath = path.join(__dirname, '../data/auth');
+    this.qrCheckInterval = null;
   }
 
   async initialize() {
     try {
-      logger.info('Inicializando WhatsApp Bot...');
+      logger.info('Inicializando WhatsApp Bot com Z-API...');
 
-      // Criar novo cliente
-      this.client = new Client({
-        authStrategy: new LocalAuth({
-          dataPath: this.authPath
-        }),
-        puppeteer: {
-          headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-        }
-      });
-
-      this.setupEventHandlers();
+      const status = await this.checkConnectionStatus();
       
-      // Iniciar limpeza automática de pausas expiradas
+      if (status.connected) {
+        this.isReady = true;
+        logger.info('Bot já está conectado!');
+        if (this.onQRCodeUpdate) {
+          this.onQRCodeUpdate(null);
+        }
+      } else {
+        await this.startQRCodePolling();
+      }
+
       this.messageHandler.startAutoCleanup();
       logger.info('Sistema de limpeza automática iniciado');
-      
-      await this.client.initialize();
 
       return true;
     } catch (error) {
@@ -45,99 +42,183 @@ class WhatsAppBot {
     }
   }
 
-  setupEventHandlers() {
-    // QR Code para autenticação - GERAR COMO IMAGEM
-    this.client.on('qr', async (qr) => {
-      try {
-        logger.info('QR Code recebido. Gerando imagem...');
-        
-        // Gerar QR Code como Data URL (base64)
-        const qrCodeDataURL = await qrcode.toDataURL(qr, {
-          errorCorrectionLevel: 'H',
-          type: 'image/png',
-          width: 300,
-          margin: 2
-        });
-
-        // Enviar para o servidor através do callback
-        if (this.onQRCodeUpdate) {
-          this.onQRCodeUpdate(qrCodeDataURL);
+  async checkConnectionStatus() {
+    try {
+      const response = await axios.get(`${this.baseUrl}/status`, {
+        headers: {
+          'Client-Token': this.clientToken
         }
+      });
 
-        logger.info('✅ QR Code gerado e disponível na interface');
-      } catch (error) {
-        logger.error('Erro ao gerar QR Code:', error);
-      }
-    });
-
-    // Bot autenticado
-    this.client.on('authenticated', () => {
-      logger.info('✅ Bot autenticado com sucesso!');
-      
-      // Limpar QR Code após autenticação
-      if (this.onQRCodeUpdate) {
-        this.onQRCodeUpdate(null);
-      }
-    });
-
-    // Bot pronto para uso
-    this.client.on('ready', () => {
-      this.isReady = true;
-      logger.info('🤖 Bot está pronto e conectado!');
-      
-      // Limpar QR Code
-      if (this.onQRCodeUpdate) {
-        this.onQRCodeUpdate(null);
-      }
-    });
-
-    // Receber mensagens
-    this.client.on('message', async (message) => {
-      try {
-        await this.messageHandler.handle(message, this.client);
-      } catch (error) {
-        logger.error('Erro ao processar mensagem:', error);
-        await message.reply('Desculpe, ocorreu um erro. Tente novamente.');
-      }
-    });
-
-    // Erros de autenticação
-    this.client.on('auth_failure', (error) => {
-      logger.error('Falha na autenticação:', error);
-      
-      // Limpar QR Code em caso de falha
-      if (this.onQRCodeUpdate) {
-        this.onQRCodeUpdate(null);
-      }
-    });
-
-    // Desconectado
-    this.client.on('disconnected', (reason) => {
-      logger.warn('Bot desconectado:', reason);
-      this.isReady = false;
-      
-      // Limpar QR Code
-      if (this.onQRCodeUpdate) {
-        this.onQRCodeUpdate(null);
-      }
-    });
+      return {
+        connected: response.data.connected === true,
+        status: response.data
+      };
+    } catch (error) {
+      logger.error('Erro ao verificar status da conexão:', error.message);
+      return { connected: false, status: null };
+    }
   }
 
-  async sendMessage(number, message) {
+  async startQRCodePolling() {
     try {
-      const chatId = `${number}@c.us`;
-      await this.client.sendMessage(chatId, message);
+      const restoreResponse = await axios.get(`${this.baseUrl}/restore-session`, {
+        headers: {
+          'Client-Token': this.clientToken
+        }
+      });
+
+      logger.info('Sessão restaurada, aguardando QR Code...');
+
+      this.qrCheckInterval = setInterval(async () => {
+        try {
+          const qrResponse = await axios.get(`${this.baseUrl}/qr-code/image`, {
+            headers: {
+              'Client-Token': this.clientToken
+            }
+          });
+
+          if (qrResponse.data && qrResponse.data.value) {
+            if (this.onQRCodeUpdate) {
+              this.onQRCodeUpdate(qrResponse.data.value);
+            }
+            logger.info('QR Code gerado e disponível');
+          }
+
+          const status = await this.checkConnectionStatus();
+          if (status.connected) {
+            this.isReady = true;
+            this.stopQRCodePolling();
+            if (this.onQRCodeUpdate) {
+              this.onQRCodeUpdate(null);
+            }
+            logger.info('Bot conectado com sucesso!');
+          }
+        } catch (error) {
+          // Ignorar erros durante polling
+        }
+      }, 3000);
+
+    } catch (error) {
+      logger.error('Erro ao iniciar polling do QR Code:', error);
+    }
+  }
+
+  stopQRCodePolling() {
+    if (this.qrCheckInterval) {
+      clearInterval(this.qrCheckInterval);
+      this.qrCheckInterval = null;
+    }
+  }
+
+  async sendText(phone, message) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/send-text`,
+        {
+          phone: phone,
+          message: message
+        },
+        {
+          headers: {
+            'Client-Token': this.clientToken,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error('Erro ao enviar mensagem de texto:', error.message);
+      throw error;
+    }
+  }
+
+  async sendOptionList(phone, message, options) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/send-option-list`,
+        {
+          phone: phone,
+          message: message,
+          optionList: options
+        },
+        {
+          headers: {
+            'Client-Token': this.clientToken,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error('Erro ao enviar lista de opções:', error.message);
+      throw error;
+    }
+  }
+
+  async sendButtonList(phone, message, buttons) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/send-button-list`,
+        {
+          phone: phone,
+          message: message,
+          buttonList: {
+            buttons: buttons
+          }
+        },
+        {
+          headers: {
+            'Client-Token': this.clientToken,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return response.data;
+    } catch (error) {
+      logger.error('Erro ao enviar botões:', error.message);
+      throw error;
+    }
+  }
+
+  async setupWebhook(webhookUrl) {
+    try {
+      await axios.put(
+        `${this.baseUrl}/update-webhook-received`,
+        {
+          value: webhookUrl
+        },
+        {
+          headers: {
+            'Client-Token': this.clientToken,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      logger.info(`Webhook configurado: ${webhookUrl}`);
       return true;
     } catch (error) {
-      logger.error('Erro ao enviar mensagem:', error);
+      logger.error('Erro ao configurar webhook:', error);
       return false;
+    }
+  }
+
+  async handleWebhookMessage(webhookData) {
+    try {
+      await this.messageHandler.handle(webhookData, this);
+    } catch (error) {
+      logger.error('Erro ao processar webhook:', error);
     }
   }
 
   getStatus() {
     return {
       connected: this.isReady,
-      state: this.client && this.client.info ? 'authenticated' : 'disconnected',
+      state: this.isReady ? 'authenticated' : 'disconnected',
       pausedUsers: this.messageHandler.getPausedUsersCount()
     };
   }
@@ -150,54 +231,40 @@ class WhatsAppBot {
     try {
       logger.info('Limpando sessão do WhatsApp...');
       
-      // Limpar QR Code
       if (this.onQRCodeUpdate) {
         this.onQRCodeUpdate(null);
       }
 
-      // Destruir cliente se existir
-      if (this.client) {
-        try {
-          await this.client.destroy();
-          logger.info('Cliente destruído');
-        } catch (error) {
-          logger.warn('Erro ao destruir cliente:', error);
-        }
-        this.client = null;
+      this.stopQRCodePolling();
+
+      // CORREÇÃO: A Z-API usa POST para logout, não DELETE
+      // E o endpoint correto é /logout-session
+      try {
+        await axios.post(
+          `${this.baseUrl}/logout-session`,
+          {},
+          {
+            headers: {
+              'Client-Token': this.clientToken,
+              'Content-Type': 'application/json'
+            },
+            timeout: 5000 // Timeout de 5 segundos
+          }
+        );
+        logger.info('Logout executado na Z-API');
+      } catch (logoutError) {
+        // Se der erro 405 ou timeout, ignorar e continuar
+        logger.warn('Aviso ao fazer logout (pode ser ignorado):', logoutError.message);
       }
 
       this.isReady = false;
-
-      // Deletar pasta de autenticação
-      if (fs.existsSync(this.authPath)) {
-        logger.info('Deletando pasta de autenticação:', this.authPath);
-        await this.deleteDirectory(this.authPath);
-        logger.info('✅ Sessão limpa com sucesso!');
-      }
-
+      logger.info('Sessão limpa com sucesso!');
       return true;
     } catch (error) {
       logger.error('Erro ao limpar sessão:', error);
+      // Mesmo com erro, marcar como desconectado
+      this.isReady = false;
       throw error;
-    }
-  }
-
-  async deleteDirectory(dirPath) {
-    if (fs.existsSync(dirPath)) {
-      const files = fs.readdirSync(dirPath);
-      
-      for (const file of files) {
-        const filePath = path.join(dirPath, file);
-        const stat = fs.statSync(filePath);
-        
-        if (stat.isDirectory()) {
-          await this.deleteDirectory(filePath);
-        } else {
-          fs.unlinkSync(filePath);
-        }
-      }
-      
-      fs.rmdirSync(dirPath);
     }
   }
 

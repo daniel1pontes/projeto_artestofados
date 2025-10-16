@@ -352,7 +352,7 @@ class GeradorOS {
       // Linha SUBTOTAL
       doc.rect(margemEsq, currentY, larguraTotal, alturaLinha).stroke();
       
-      doc.font('Helvetica-Bold').fontSize(9);
+      doc.font('Helvetica-Bold').fontSize(8);
       doc.text('SUBTOTAL', margemEsq + 3, currentY + 8, {
         width: colunas[0].width + colunas[1].width - 50,
         align: 'center'
@@ -370,7 +370,7 @@ class GeradorOS {
         doc.rect(margemEsq, currentY, larguraTotal, alturaLinha).stroke();
         
         doc.fillColor('#000000')
-          .text(`DESCONTO (${dados.desconto}%)`, margemEsq + 3, currentY + 8, {
+          .text(`DESCONTO`, margemEsq + 3, currentY + 8, {
             width: colunas[0].width + colunas[1].width - 50,
             align: 'center'
           })
@@ -387,7 +387,7 @@ class GeradorOS {
     // Linha do VALOR TOTAL (sempre aparece)
     doc.rect(margemEsq, currentY, larguraTotal, alturaLinha).stroke();
 
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000');
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000');
     doc.text('VALOR TOTAL', margemEsq + 3, currentY + 6, {
       width: colunas[0].width + colunas[1].width - 50,
       align: 'center'

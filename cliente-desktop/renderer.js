@@ -594,6 +594,75 @@ function toBase64(file) {
     reader.onerror = reject;
   });
 }
+// Array para armazenar todas as imagens selecionadas
+let imagensSelecionadas = [];
+
+// Configurar o input de imagens para acumular
+document.addEventListener('DOMContentLoaded', () => {
+  const imagensInput = document.getElementById('imagens');
+  const imagensPreview = document.getElementById('imagensPreview');
+
+  if (imagensInput) {
+    imagensInput.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      
+      for (const file of files) {
+        try {
+          const base64 = await toBase64(file);
+          
+          // Adicionar ao array
+          imagensSelecionadas.push({
+            nome: file.name,
+            data: base64
+          });
+
+          // Criar preview
+          const previewItem = document.createElement('div');
+          previewItem.style.cssText = 'position: relative; width: 100px; height: 100px; border: 2px solid #ddd; border-radius: 5px; overflow: hidden;';
+          
+          const img = document.createElement('img');
+          img.src = base64;
+          img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+          
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = '×';
+          removeBtn.type = 'button';
+          removeBtn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: red; color: white; border: none; border-radius: 50%; width: 25px; height: 25px; cursor: pointer; font-size: 18px; line-height: 1;';
+          
+          const imagemIndex = imagensSelecionadas.length - 1;
+          removeBtn.onclick = () => {
+            imagensSelecionadas.splice(imagemIndex, 1);
+            previewItem.remove();
+            atualizarIndices();
+          };
+          
+          previewItem.appendChild(img);
+          previewItem.appendChild(removeBtn);
+          imagensPreview.appendChild(previewItem);
+          
+        } catch (error) {
+          console.error('Erro ao processar imagem:', error);
+        }
+      }
+      
+      // Limpar input para permitir adicionar a mesma imagem novamente
+      imagensInput.value = '';
+    });
+  }
+
+  // Função para atualizar índices após remoção
+  function atualizarIndices() {
+    const previews = imagensPreview.children;
+    for (let i = 0; i < previews.length; i++) {
+      const removeBtn = previews[i].querySelector('button');
+      removeBtn.onclick = () => {
+        imagensSelecionadas.splice(i, 1);
+        previews[i].remove();
+        atualizarIndices();
+      };
+    }
+  }
+});
 
 let imagensSelecionadas = [];
 

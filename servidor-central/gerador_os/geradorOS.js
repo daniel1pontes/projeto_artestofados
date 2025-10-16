@@ -430,37 +430,37 @@ class GeradorOS {
   }
 
   adicionarImagensUsuario(doc, imagens) {
-    if (!imagens || imagens.length === 0) return;
+  if (!imagens || imagens.length === 0) return;
 
-    doc.addPage();
-    doc
-      .fontSize(14)
-      .font('Helvetica-Bold')
-      .text('📎 Anexos do Cliente', { align: 'center' });
-    doc.moveDown(2);
+  doc.addPage();
+  doc
+    .fontSize(14)
+    .font('Helvetica-Bold')
+    .text('Anexos do Cliente', { align: 'center' }); // REMOVI O EMOJI
+  doc.moveDown(2);
 
-    let posY = 100;
-    for (const imagem of imagens) {
-      try {
-        const base64Data = imagem.data.replace(/^data:image\/[a-z]+;base64,/, '');
-        const buffer = Buffer.from(base64Data, 'base64');
+  let posY = 100;
+  for (const imagem of imagens) {
+    try {
+      const base64Data = imagem.data.replace(/^data:image\/[a-z]+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
 
-        if (posY > 650) {
-          doc.addPage();
-          posY = 100;
-        }
-
-        doc.image(buffer, 100, posY, { 
-          fit: [400, 400], 
-          align: 'center', 
-          valign: 'center' 
-        });
-        posY += 420;
-      } catch (err) {
-        logger.error('Erro ao adicionar imagem do cliente:', err);
+      if (posY > 650) {
+        doc.addPage();
+        posY = 100;
       }
+
+      doc.image(buffer, 100, posY, { 
+        fit: [400, 400], 
+        align: 'center', 
+        valign: 'center' 
+      });
+      posY += 420;
+    } catch (err) {
+      logger.error('Erro ao adicionar imagem do cliente:', err);
     }
   }
+}
 
   formatarMoeda(valor) {
     return parseFloat(valor).toLocaleString('pt-BR', {

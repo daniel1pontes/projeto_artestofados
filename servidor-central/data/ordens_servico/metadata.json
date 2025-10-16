@@ -6,5 +6,21 @@
     "dataCriacao": "2025-10-13T23:19:21.401Z",
     "prazoEntrega": "0002-02-22",
     "formaPagamento": "2"
+  },
+  {
+    "osId": "DAN1760397704678",
+    "cliente": "danielç xera pica",
+    "valorTotal": 200,
+    "dataCriacao": "2025-10-13T23:21:44.732Z",
+    "prazoEntrega": "2025-10-13",
+    "formaPagamento": "caneco"
+  },
+  {
+    "osId": "JOA1760398015412",
+    "cliente": "joao",
+    "valorTotal": 1.12,
+    "dataCriacao": "2025-10-13T23:26:55.484Z",
+    "prazoEntrega": "0002-02-22",
+    "formaPagamento": "2"
   }
 ]

@@ -22,5 +22,53 @@
     "dataCriacao": "2025-10-13T23:26:55.484Z",
     "prazoEntrega": "0002-02-22",
     "formaPagamento": "2"
+  },
+  {
+    "osId": "EE1760634166242",
+    "cliente": "ee",
+    "valorTotal": 100,
+    "dataCriacao": "2025-10-16T17:02:46.312Z",
+    "prazoEntrega": "0022-02-22",
+    "formaPagamento": "w"
+  },
+  {
+    "osId": "TES1760634564677",
+    "cliente": "teste1",
+    "valorTotal": 3.8416,
+    "dataCriacao": "2025-10-16T17:09:24.750Z",
+    "prazoEntrega": "0022-02-02",
+    "formaPagamento": "2"
+  },
+  {
+    "osId": "TES1760635108680",
+    "cliente": "teste2",
+    "valorTotal": 1.96,
+    "dataCriacao": "2025-10-16T17:18:28.746Z",
+    "prazoEntrega": "0002-02-02",
+    "formaPagamento": "w"
+  },
+  {
+    "osId": "TES1760635216440",
+    "cliente": "teste3",
+    "valorTotal": 100,
+    "dataCriacao": "2025-10-16T17:20:16.471Z",
+    "prazoEntrega": "0002-02-02",
+    "formaPagamento": "pix"
+  },
+  {
+    "osId": "NIC1760635369631",
+    "cliente": "nicholas vendedor de pica",
+    "valorTotal": 50,
+    "dataCriacao": "2025-10-16T17:22:49.716Z",
+    "prazoEntrega": "1000-10-10",
+    "formaPagamento": "pix"
+  },
+  {
+    "osId": "NIC1760635455704",
+    "cliente": "nicholas vendedor de coca",
+    "valorTotal": 50,
+    "dataCriacao": "2025-10-16T17:24:15.771Z",
+    "prazoEntrega": "1000-11-10",
+    "formaPagamento": "pix"
   }
 ]

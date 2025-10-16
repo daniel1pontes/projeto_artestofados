@@ -1,7 +1,8 @@
-// cliente-desktop/renderer.js - VERSÃO COMPLETA COM Z-API
+// cliente-desktop/renderer.js - VERSÃO COM DESCONTO GERAL CORRIGIDO
 const { ipcRenderer, shell } = require('electron');
 
 let SERVER_URL = 'http://localhost:4000';
+let imagensSelecionadas = [];
 
 // ==================== CONFIGURAÇÃO INICIAL ====================
 
@@ -33,22 +34,28 @@ function updateServerStatus(connected) {
 // ==================== NAVEGAÇÃO DE TABS ====================
 
 function switchTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
+    console.log('Mudando para tab:', tabName);
     
-    document.getElementById(tabName).classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
     
-    if (event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
-    } else {
-        const buttons = document.querySelectorAll('.nav-button');
-        buttons.forEach(btn => {
-            const onclickStr = btn.getAttribute('onclick');
-            if (onclickStr && onclickStr.includes(tabName)) {
-                btn.classList.add('active');
-            }
-        });
+    document.querySelectorAll('.nav-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
     }
+    
+    const allButtons = document.querySelectorAll('.nav-button');
+    allButtons.forEach(btn => {
+        const onclickAttr = btn.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(tabName)) {
+            btn.classList.add('active');
+        }
+    });
 
     if (tabName === 'chatbot') {
         loadAtendimentos();
@@ -56,6 +63,11 @@ function switchTab(tabName) {
         loadPausedUsers();
     } else if (tabName === 'banco') {
         loadOSList();
+    } else if (tabName === 'gerador') {
+        const itensContainer = document.getElementById('itensContainer');
+        if (itensContainer && itensContainer.children.length === 0) {
+            addItem();
+        }
     }
 }
 
@@ -73,7 +85,6 @@ async function checkBotStatus() {
         const qrCodeCard = document.getElementById('qrCodeCard');
         
         if (data.status === 'online' && data.connected) {
-            // Bot conectado e operando
             indicator.className = 'status-indicator online';
             text.textContent = '✅ Bot conectado e operando';
             text.style.color = '#28a745';
@@ -86,7 +97,6 @@ async function checkBotStatus() {
             loadPausedUsers();
             
         } else if (data.status === 'online') {
-            // Bot iniciado, aguardando conexão (mostrando QR Code)
             indicator.className = 'status-indicator offline';
             text.textContent = '⏳ Aguardando leitura do QR Code...';
             text.style.color = '#ffc107';
@@ -99,7 +109,6 @@ async function checkBotStatus() {
             }
             
         } else {
-            // Bot desconectado
             indicator.className = 'status-indicator offline';
             text.textContent = '⚠️ Bot desconectado';
             text.style.color = '#dc3545';
@@ -433,7 +442,7 @@ function showPauseHelp() {
 1️⃣ Cliente envia mensagem
    → Bot responde automaticamente
 
-2️⃣ VOCÊ responde manualmente no WhatsApp Web
+2️⃣ VOCÊ responde manualmente no WhatsApp
    → Bot PAUSA automaticamente por 2 horas
    → Cliente aparece na lista acima
 
@@ -477,6 +486,8 @@ O cliente pode enviar: #ativar
 
 function addItem() {
     const container = document.getElementById('itensContainer');
+    if (!container) return;
+    
     const newItem = document.createElement('div');
     newItem.className = 'item-row';
     newItem.innerHTML = `
@@ -493,8 +504,12 @@ function addItem() {
             <input type="number" class="form-control" name="valorUnitario" min="0" step="0.01" required>
         </div>
         <div>
+            <label>Desconto (%)</label>
+            <input type="number" class="form-control" name="desconto" min="0" max="100" value="0" step="0.01">
+        </div>
+        <div>
             <label>Total</label>
-            <input type="text" class="form-control" name="total" readonly>
+            <input type="text" class="form-control" name="total" readonly style="background: #f0f0f0;">
         </div>
         <div>
             <button type="button" class="btn-remove" onclick="removeItem(this)">Remover</button>
@@ -509,224 +524,57 @@ function removeItem(btn) {
 }
 
 function attachItemCalculation() {
+    const atualizarTotais = () => {
+        let totalGeral = 0;
+        const descontoGeral = parseFloat(document.getElementById('desconto').value) || 0;
+
+        document.querySelectorAll('.item-row').forEach(row => {
+            const qtd = parseFloat(row.querySelector('[name="quantidade"]').value) || 0;
+            const valor = parseFloat(row.querySelector('[name="valorUnitario"]').value) || 0;
+            const descontoItem = parseFloat(row.querySelector('[name="desconto"]').value) || 0;
+            const totalInput = row.querySelector('[name="total"]');
+
+            // aplica desconto do item
+            let subtotal = qtd * valor;
+            let valorComDescontoItem = subtotal - (subtotal * descontoItem / 100);
+
+            // aplica desconto geral (nota)
+            let valorFinal = valorComDescontoItem - (valorComDescontoItem * descontoGeral / 100);
+
+            totalInput.value = formatMoney(valorFinal);
+            totalGeral += valorFinal;
+        });
+
+        document.getElementById('totalGeral').textContent = formatMoney(totalGeral);
+    };
+
     document.querySelectorAll('.item-row').forEach(row => {
         const qtd = row.querySelector('[name="quantidade"]');
         const valor = row.querySelector('[name="valorUnitario"]');
-        const total = row.querySelector('[name="total"]');
+        const desconto = row.querySelector('[name="desconto"]');
 
-        const calculate = () => {
-            const t = (qtd.value || 0) * (valor.value || 0);
-            total.value = formatMoney(t);
-        };
-
-        qtd.removeEventListener('input', calculate);
-        valor.removeEventListener('input', calculate);
-        
-        qtd.addEventListener('input', calculate);
-        valor.addEventListener('input', calculate);
+        qtd.addEventListener('input', atualizarTotais);
+        valor.addEventListener('input', atualizarTotais);
+        desconto.addEventListener('input', atualizarTotais);
     });
+
+    const descontoGeralInput = document.getElementById('desconto');
+    if (descontoGeralInput) {
+        descontoGeralInput.addEventListener('input', atualizarTotais);
+    }
+
+    atualizarTotais();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const osForm = document.getElementById('osForm');
-  if (osForm) {
-    osForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const itens = [];
-      document.querySelectorAll('.item-row').forEach(row => {
-        itens.push({
-          quantidade: parseInt(row.querySelector('[name="quantidade"]').value),
-          descricao: row.querySelector('[name="descricao"]').value,
-          valorUnitario: parseFloat(row.querySelector('[name="valorUnitario"]').value)
-        });
-      });
-
-      const imagensInput = document.getElementById('imagens');
-      const imagens = [...imagensSelecionadas];
-
-      for (const file of imagensInput.files) {
-        const base64 = await toBase64(file);
-        imagens.push({ nome: file.name, data: base64 });
-      }
-
-      const dadosOS = {
-        cliente: document.getElementById('nomeCliente').value,
-        prazoEntrega: document.getElementById('prazoEntrega').value,
-        formaPagamento: document.getElementById('formaPagamento').value,
-        desconto: parseFloat(document.getElementById('desconto').value) || 0,
-        itens: itens,
-        imagens: imagens
-      };
-
-      try {
-        showAlert('osAlert', 'Gerando Ordem de Serviço...', 'success');
-        const response = await fetch(`${SERVER_URL}/api/os/criar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(dadosOS)
-        });
-        const data = await response.json();
-
-        if (data.success) {
-          showAlert('osAlert', `✅ OS #${data.osId} gerada com sucesso! Valor: ${formatMoney(data.valorTotal)}`, 'success');
-          osForm.reset();
-          document.getElementById('itensContainer').innerHTML = '';
-          imagensSelecionadas = [];
-          document.getElementById('imagensPreview').innerHTML = '';
-          addItem();
-          loadOSList();
-        } else {
-          showAlert('osAlert', 'Erro: ' + data.message, 'danger');
-        }
-      } catch (error) {
-        showAlert('osAlert', 'Erro ao gerar OS: ' + error.message, 'danger');
-      }
-    });
-  }
-});
 
 function toBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-  });
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+    });
 }
-// Array para armazenar todas as imagens selecionadas
-let imagensSelecionadas = [];
-
-// Configurar o input de imagens para acumular
-document.addEventListener('DOMContentLoaded', () => {
-  const imagensInput = document.getElementById('imagens');
-  const imagensPreview = document.getElementById('imagensPreview');
-
-  if (imagensInput) {
-    imagensInput.addEventListener('change', async (e) => {
-      const files = e.target.files;
-      
-      for (const file of files) {
-        try {
-          const base64 = await toBase64(file);
-          
-          // Adicionar ao array
-          imagensSelecionadas.push({
-            nome: file.name,
-            data: base64
-          });
-
-          // Criar preview
-          const previewItem = document.createElement('div');
-          previewItem.style.cssText = 'position: relative; width: 100px; height: 100px; border: 2px solid #ddd; border-radius: 5px; overflow: hidden;';
-          
-          const img = document.createElement('img');
-          img.src = base64;
-          img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-          
-          const removeBtn = document.createElement('button');
-          removeBtn.textContent = '×';
-          removeBtn.type = 'button';
-          removeBtn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: red; color: white; border: none; border-radius: 50%; width: 25px; height: 25px; cursor: pointer; font-size: 18px; line-height: 1;';
-          
-          const imagemIndex = imagensSelecionadas.length - 1;
-          removeBtn.onclick = () => {
-            imagensSelecionadas.splice(imagemIndex, 1);
-            previewItem.remove();
-            atualizarIndices();
-          };
-          
-          previewItem.appendChild(img);
-          previewItem.appendChild(removeBtn);
-          imagensPreview.appendChild(previewItem);
-          
-        } catch (error) {
-          console.error('Erro ao processar imagem:', error);
-        }
-      }
-      
-      // Limpar input para permitir adicionar a mesma imagem novamente
-      imagensInput.value = '';
-    });
-  }
-
-  // Função para atualizar índices após remoção
-  function atualizarIndices() {
-    const previews = imagensPreview.children;
-    for (let i = 0; i < previews.length; i++) {
-      const removeBtn = previews[i].querySelector('button');
-      removeBtn.onclick = () => {
-        imagensSelecionadas.splice(i, 1);
-        previews[i].remove();
-        atualizarIndices();
-      };
-    }
-  }
-});
-
-let imagensSelecionadas = [];
-
-document.addEventListener('DOMContentLoaded', () => {
-  const imagensInput = document.getElementById('imagens');
-  const imagensPreview = document.getElementById('imagensPreview');
-
-  if (imagensInput) {
-    imagensInput.addEventListener('change', async (e) => {
-      const files = e.target.files;
-      
-      for (const file of files) {
-        try {
-          const base64 = await toBase64(file);
-          
-          imagensSelecionadas.push({
-            nome: file.name,
-            data: base64
-          });
-
-          const previewItem = document.createElement('div');
-          previewItem.style.cssText = 'position: relative; width: 100px; height: 100px; border: 2px solid #ddd; border-radius: 5px; overflow: hidden;';
-          
-          const img = document.createElement('img');
-          img.src = base64;
-          img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-          
-          const removeBtn = document.createElement('button');
-          removeBtn.textContent = '×';
-          removeBtn.type = 'button';
-          removeBtn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: red; color: white; border: none; border-radius: 50%; width: 25px; height: 25px; cursor: pointer; font-size: 18px; line-height: 1;';
-          
-          const imagemIndex = imagensSelecionadas.length - 1;
-          removeBtn.onclick = () => {
-            imagensSelecionadas.splice(imagemIndex, 1);
-            previewItem.remove();
-            atualizarIndices();
-          };
-          
-          previewItem.appendChild(img);
-          previewItem.appendChild(removeBtn);
-          imagensPreview.appendChild(previewItem);
-          
-        } catch (error) {
-          console.error('Erro ao processar imagem:', error);
-        }
-      }
-      
-      imagensInput.value = '';
-    });
-  }
-
-  function atualizarIndices() {
-    const previews = imagensPreview.children;
-    for (let i = 0; i < previews.length; i++) {
-      const removeBtn = previews[i].querySelector('button');
-      removeBtn.onclick = () => {
-        imagensSelecionadas.splice(i, 1);
-        previews[i].remove();
-        atualizarIndices();
-      };
-    }
-  }
-});
 
 // ==================== FUNÇÕES DO BANCO DE OS ====================
 
@@ -802,21 +650,6 @@ async function baixarOS(osId) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const searchInput = document.getElementById('searchOS');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
-            const rows = document.querySelectorAll('#osListTable tbody tr');
-            
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
-        });
-    }
-});
-
 // ==================== FUNÇÕES UTILITÁRIAS ====================
 
 function showAlert(elementId, message, type) {
@@ -839,14 +672,154 @@ function formatMoney(value) {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Aplicação iniciada');
     
+    const osForm = document.getElementById('osForm');
+    if (osForm) {
+        const prazoInput = document.getElementById('prazoEntrega');
+        if (prazoInput) {
+            prazoInput.addEventListener('input', () => {
+                const valor = prazoInput.value; // formato ISO: yyyy-mm-dd
+                if (valor) {
+                    const ano = valor.split('-')[0];
+                    if (ano.length > 4) {
+                        alert('⚠️ O ano deve ter apenas 4 dígitos.');
+                        prazoInput.value = ''; // limpa o campo
+                    }
+                }
+            });
+        }
+        osForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const itens = [];
+            document.querySelectorAll('.item-row').forEach(row => {
+                itens.push({
+                    quantidade: parseInt(row.querySelector('[name="quantidade"]').value),
+                    descricao: row.querySelector('[name="descricao"]').value,
+                    valorUnitario: parseFloat(row.querySelector('[name="valorUnitario"]').value),
+                    desconto: parseFloat(row.querySelector('[name="desconto"]').value) || 0
+                });
+            });
+
+            const descontoGeral = parseFloat(document.getElementById('desconto').value) || 0;
+            
+            const dadosOS = {
+                cliente: document.getElementById('nomeCliente').value,
+                prazoEntrega: document.getElementById('prazoEntrega').value,
+                formaPagamento: document.getElementById('formaPagamento').value,
+                desconto: descontoGeral,
+                itens: itens,
+                imagens: imagensSelecionadas
+            };
+
+            console.log('Dados OS:', dadosOS);
+
+            try {
+                showAlert('osAlert', 'Gerando Ordem de Serviço...', 'success');
+                const response = await fetch(`${SERVER_URL}/api/os/criar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dadosOS)
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('osAlert', `✅ OS #${data.osId} gerada com sucesso! Valor: ${formatMoney(data.valorTotal)}`, 'success');
+                    osForm.reset();
+                    document.getElementById('itensContainer').innerHTML = '';
+                    imagensSelecionadas = [];
+                    document.getElementById('imagensPreview').innerHTML = '';
+                    addItem();
+                    loadOSList();
+                } else {
+                    showAlert('osAlert', 'Erro: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('osAlert', 'Erro ao gerar OS: ' + error.message, 'danger');
+            }
+        });
+    }
+
+    const imagensInput = document.getElementById('imagens');
+    const imagensPreview = document.getElementById('imagensPreview');
+
+    if (imagensInput) {
+        imagensInput.addEventListener('change', async (e) => {
+            const files = e.target.files;
+            
+            for (const file of files) {
+                try {
+                    const base64 = await toBase64(file);
+                    
+                    imagensSelecionadas.push({
+                        nome: file.name,
+                        data: base64
+                    });
+
+                    const previewItem = document.createElement('div');
+                    previewItem.style.cssText = 'position: relative; width: 100px; height: 100px; border: 2px solid #ddd; border-radius: 5px; overflow: hidden;';
+                    
+                    const img = document.createElement('img');
+                    img.src = base64;
+                    img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.textContent = '×';
+                    removeBtn.type = 'button';
+                    removeBtn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: red; color: white; border: none; border-radius: 50%; width: 25px; height: 25px; cursor: pointer; font-size: 18px; line-height: 1;';
+                    
+                    const imagemIndex = imagensSelecionadas.length - 1;
+                    removeBtn.onclick = () => {
+                        imagensSelecionadas.splice(imagemIndex, 1);
+                        previewItem.remove();
+                        atualizarIndices();
+                    };
+                    
+                    previewItem.appendChild(img);
+                    previewItem.appendChild(removeBtn);
+                    imagensPreview.appendChild(previewItem);
+                    
+                } catch (error) {
+                    console.error('Erro ao processar imagem:', error);
+                }
+            }
+            
+            imagensInput.value = '';
+        });
+    }
+
+    function atualizarIndices() {
+        const previews = imagensPreview.children;
+        for (let i = 0; i < previews.length; i++) {
+            const removeBtn = previews[i].querySelector('button');
+            removeBtn.onclick = () => {
+                imagensSelecionadas.splice(i, 1);
+                previews[i].remove();
+                atualizarIndices();
+            };
+        }
+    }
+
+    const searchInput = document.getElementById('searchOS');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = document.querySelectorAll('#osListTable tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+    }
+
     loadConfig().then(() => {
         checkBotStatus();
         setInterval(checkBotStatus, 10000);
-        
         setInterval(loadPausedUsers, 30000);
-        
         attachItemCalculation();
         loadAtendimentos();
+        
+        switchTab('chatbot');
     });
 });
 
@@ -854,13 +827,13 @@ document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) {
         switch(e.key) {
             case '1':
-                document.querySelector('[onclick*="chatbot"]').click();
+                switchTab('chatbot');
                 break;
             case '2':
-                document.querySelector('[onclick*="gerador"]').click();
+                switchTab('gerador');
                 break;
             case '3':
-                document.querySelector('[onclick*="banco"]').click();
+                switchTab('banco');
                 break;
         }
     }
@@ -874,7 +847,6 @@ window.addEventListener('unhandledrejection', (e) => {
     console.error('Promise rejeitada:', e.reason);
 });
 
-// Exportar funções para uso no HTML
 window.switchTab = switchTab;
 window.connectWhatsApp = connectWhatsApp;
 window.disconnectBot = disconnectBot;

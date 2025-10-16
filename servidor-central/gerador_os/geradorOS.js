@@ -5,27 +5,22 @@ const logger = require('../utils/logger');
 
 class GeradorOS {
   constructor() {
-  this.outputDir = path.join(__dirname, '../data/ordens_servico');
-  this.buildDir = path.join(__dirname, '../build');
+    this.outputDir = path.join(__dirname, '../data/ordens_servico');
+    this.buildDir = path.join(__dirname, '../build');
+    this.logoPathAbsoluto = 'C:\\Users\\lucia\\OneDrive\\Documentos\\Projetos\\projeto_artestofados\\cliente-desktop\\build\\logo_cortada.png';
+    this.ensureOutputDir();
+  }
 
-  // Caminho fixo da logo
-  this.logoPathAbsoluto = 'C:\\Users\\lucia\\OneDrive\\Documentos\\Projetos\\projeto_artestofados\\cliente-desktop\\build\\logo_cortada.png';
-
-  this.ensureOutputDir();
-}
   formatarData(data) {
-    // Se já vier como string no formato correto, retorna
     if (typeof data === 'string' && data.includes('/')) {
       return data;
     }
     
-    // Se vier como objeto Date ou string ISO
     try {
       const dataObj = new Date(data);
       
-      // Verifica se é uma data válida
       if (isNaN(dataObj.getTime())) {
-        return data; // Retorna o valor original se não for válida
+        return data;
       }
       
       const dia = String(dataObj.getDate()).padStart(2, '0');
@@ -35,35 +30,30 @@ class GeradorOS {
       return `${dia}/${mes}/${ano}`;
     } catch (error) {
       logger.error('Erro ao formatar data:', error);
-      return data; // Retorna o valor original em caso de erro
+      return data;
     }
   }
-  // Adicione este método na classe GeradorOS, depois do método formatarData
 
   async salvarMetadados(metadata) {
     try {
       const metadataPath = path.join(this.outputDir, 'metadata.json');
       let allMetadata = [];
 
-      // Tentar carregar metadados existentes
       try {
         const data = await fs.promises.readFile(metadataPath, 'utf8');
         allMetadata = JSON.parse(data);
       } catch (error) {
-        // Arquivo não existe ainda
         allMetadata = [];
       }
 
-      // Adicionar novo metadado
       allMetadata.push(metadata);
-
-      // Salvar arquivo atualizado
       await fs.promises.writeFile(metadataPath, JSON.stringify(allMetadata, null, 2));
       logger.info('Metadados salvos com sucesso');
     } catch (error) {
       logger.error('Erro ao salvar metadados:', error);
     }
   }
+
   async ensureOutputDir() {
     try {
       await fs.promises.mkdir(this.outputDir, { recursive: true });
@@ -103,23 +93,19 @@ class GeradorOS {
 
           doc.pipe(stream);
 
-          // ======= CONTEÚDO PRINCIPAL =======
           this.adicionarCabecalho(doc);
           this.adicionarTabelaItens(doc, dados);
           this.adicionarDadosCliente(doc, dados);
           this.adicionarAssinaturas(doc);
 
-          // ======= ANEXOS DE ITENS (por descrição) =======
           if (this.temImagens(dados)) {
             this.adicionarAnexos(doc, dados);
           }
 
-          // ======= IMAGENS DO USUÁRIO =======
           if (dados.imagens && dados.imagens.length > 0) {
             this.adicionarImagensUsuario(doc, dados.imagens);
           }
 
-          // Finaliza e salva o arquivo
           doc.end();
 
           stream.on('finish', async () => {
@@ -127,10 +113,8 @@ class GeradorOS {
               const stats = await fs.promises.stat(filePath);
               logger.info('PDF criado com sucesso. Tamanho:', stats.size, 'bytes');
 
-              const valorTotal = dados.itens.reduce((sum, item) =>
-                sum + (parseFloat(item.quantidade) * parseFloat(item.valorUnitario)), 0);
+              const { valorTotal } = this.calcularValores(dados);
 
-              // *** SALVAR METADADOS DA OS ***
               await this.salvarMetadados({
                 osId,
                 cliente: dados.cliente,
@@ -145,7 +129,7 @@ class GeradorOS {
                 filePath,
                 fileName,
                 valorTotal,
-                cliente: dados.cliente, // ADICIONAR ISTO
+                cliente: dados.cliente,
                 sucesso: true
               });
             } catch (error) {
@@ -199,7 +183,6 @@ class GeradorOS {
   }
 
   adicionarCabecalho(doc) {
-    // Tenta carregar logo, senão desenha retângulo
     try {
       if (this.logoPathAbsoluto && fs.existsSync(this.logoPathAbsoluto)) {
         doc.image(this.logoPathAbsoluto, 50, 40, { width: 100 });
@@ -213,7 +196,6 @@ class GeradorOS {
       doc.rect(50, 40, 100, 80).stroke();
     }
 
-    // Dados da empresa
     doc
       .fontSize(16)
       .font('Helvetica-Bold')
@@ -224,13 +206,47 @@ class GeradorOS {
       .text('AV: Almirante Barroso, 389, Centro – João Pessoa –PB', 170, 65)
       .text('CNPJ: 08.621.718/0001-07', 170, 80);
 
-    // Título
     doc
       .fontSize(18)
       .font('Helvetica-Bold')
       .text('ORDEM DE SERVIÇO', 50, 140, { align: 'center', width: 495 });
 
     doc.moveDown(3);
+  }
+
+  calcularValores(dados) {
+    let subtotal = 0;
+    let totalDescontoItens = 0;
+    
+    // Calcula subtotal dos itens e desconto por item
+    dados.itens.forEach(item => {
+      const valorItem = parseFloat(item.quantidade) * parseFloat(item.valorUnitario);
+      
+      if (item.desconto && parseFloat(item.desconto) > 0) {
+        const descontoItem = (valorItem * parseFloat(item.desconto)) / 100;
+        totalDescontoItens += descontoItem;
+        subtotal += (valorItem - descontoItem);
+      } else {
+        subtotal += valorItem;
+      }
+    });
+
+    // Aplica desconto GERAL (na nota toda) se houver
+    let descontoGeral = 0;
+    let valorTotal = subtotal;
+    
+    if (dados.desconto && parseFloat(dados.desconto) > 0) {
+      descontoGeral = (subtotal * parseFloat(dados.desconto)) / 100;
+      valorTotal = subtotal - descontoGeral;
+    }
+
+    return {
+      subtotal,
+      descontoGeral,
+      totalDescontoItens,
+      valorTotal,
+      temDesconto: descontoGeral > 0 || totalDescontoItens > 0
+    };
   }
 
   adicionarTabelaItens(doc, dados) {
@@ -249,7 +265,6 @@ class GeradorOS {
     // ========== CABEÇALHO ==========
     doc.rect(margemEsq, currentY, larguraTotal, headerHeight).stroke();
     
-    // Linhas verticais do cabeçalho
     let posX = margemEsq;
     colunas.forEach((col, i) => {
       if (i > 0) {
@@ -258,7 +273,6 @@ class GeradorOS {
       }
     });
 
-    // Texto do cabeçalho
     doc.fontSize(9).font('Helvetica-Bold');
     posX = margemEsq;
     colunas.forEach(col => {
@@ -273,23 +287,25 @@ class GeradorOS {
     doc.font('Helvetica').fontSize(9);
 
     // ========== ITENS ==========
-    let valorTotal = 0;
     dados.itens.forEach(item => {
-      const totalItem = parseFloat(item.quantidade) * parseFloat(item.valorUnitario);
-      valorTotal += totalItem;
+      const valorBruto = parseFloat(item.quantidade) * parseFloat(item.valorUnitario);
+      let valorFinal = valorBruto;
+      
+      if (item.desconto && parseFloat(item.desconto) > 0) {
+        const descontoItem = (valorBruto * parseFloat(item.desconto)) / 100;
+        valorFinal = valorBruto - descontoItem;
+      }
+
       const alturaLinha = 30;
 
-      // Verifica se precisa de nova página
       if (currentY + alturaLinha > 680) {
         doc.addPage();
         currentY = 50;
       }
 
-      // Desenha linha do item
       posX = margemEsq;
       doc.rect(posX, currentY, larguraTotal, alturaLinha).stroke();
       
-      // Linhas verticais
       colunas.forEach((col, i) => {
         if (i > 0) {
           posX += colunas[i - 1].width;
@@ -297,7 +313,6 @@ class GeradorOS {
         }
       });
 
-      // Texto dos itens
       posX = margemEsq;
       doc.text(item.quantidade.toString(), posX + 3, currentY + 10, { 
         width: colunas[0].width - 6, 
@@ -316,62 +331,90 @@ class GeradorOS {
         align: 'center' 
       });
       posX += colunas[2].width;
-      
-      doc.text(this.formatarMoeda(totalItem), posX + 3, currentY + 10, { 
-        width: colunas[3].width - 6, 
-        align: 'center' 
-      });
+      // Sempre mostrar apenas o valor final, sem risco
+      doc.fillColor('#000000')
+        .text(this.formatarMoeda(valorFinal), posX + 3, currentY + 10, { 
+          width: colunas[3].width - 6, 
+          align: 'center'
+        });
+  
 
       currentY += alturaLinha;
     });
 
-    // ========== LINHA FINAL - TOTAL ==========
-    // ========== LINHA FINAL - TOTAL ==========
-    const alturaTotal = 25;
+    // ========== LINHAS FINAIS - SUBTOTAL, DESCONTO E TOTAL ==========
+    const { subtotal, descontoGeral, totalDescontoItens, valorTotal, temDesconto } = this.calcularValores(dados);
+    const alturaLinha = 25;
+    const posicaoUltimaColuna = margemEsq + colunas[0].width + colunas[1].width + colunas[2].width;
 
-    // desenha o retângulo da última linha
-    doc.rect(margemEsq, currentY, larguraTotal, alturaTotal).stroke();
+    // Se houver desconto GERAL, mostra SUBTOTAL primeiro
+    if (descontoGeral > 0 || totalDescontoItens > 0) {
+      // Linha SUBTOTAL
+      doc.rect(margemEsq, currentY, larguraTotal, alturaLinha).stroke();
+      
+      doc.font('Helvetica-Bold').fontSize(9);
+      doc.text('SUBTOTAL', margemEsq + 3, currentY + 8, {
+        width: colunas[0].width + colunas[1].width - 50,
+        align: 'center'
+      });
 
-    // Larguras das colunas
-    const larguraQtd = colunas[0].width;
-    const larguraDescricao = colunas[1].width;
-    const larguraValorUnit = colunas[2].width;
-    const larguraValorTotal = colunas[3].width;
+      doc.text(this.formatarMoeda(subtotal), posicaoUltimaColuna + 3, currentY + 8, {
+        width: colunas[3].width - 40,
+        align: 'right'
+      });
 
-    // Texto "VALOR TOTAL" ocupando as 2 primeiras colunas (QTD + DESCRIÇÃO)
-    const larguraDuasPrimeiras = larguraQtd + larguraDescricao;
+      currentY += alturaLinha;
 
-    doc.font('Helvetica-Bold').fontSize(9);
-    doc.text('VALOR TOTAL', margemEsq + 3, currentY + 8, {
-      width: larguraDuasPrimeiras -50,
+      // Linha do DESCONTO GERAL (se houver)
+      if (descontoGeral > 0) {
+        doc.rect(margemEsq, currentY, larguraTotal, alturaLinha).stroke();
+        
+        doc.fillColor('#000000')
+          .text(`DESCONTO (${dados.desconto}%)`, margemEsq + 3, currentY + 8, {
+            width: colunas[0].width + colunas[1].width - 50,
+            align: 'center'
+          })
+          .text(`- ${this.formatarMoeda(descontoGeral)}`, posicaoUltimaColuna + 3, currentY + 8, {
+            width: colunas[3].width - 40,
+            align: 'right'
+          })
+          .fillColor('#000000');
+
+        currentY += alturaLinha;
+      }
+    }
+
+    // Linha do VALOR TOTAL (sempre aparece)
+    doc.rect(margemEsq, currentY, larguraTotal, alturaLinha).stroke();
+
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#000000');
+    doc.text('VALOR TOTAL', margemEsq + 3, currentY + 6, {
+      width: colunas[0].width + colunas[1].width - 50,
       align: 'center'
     });
 
-    // Valor alinhado à direita na última coluna
-    const posicaoUltimaColuna = margemEsq + larguraQtd + larguraDescricao + larguraValorUnit;
-
-    doc.text(this.formatarMoeda(valorTotal), posicaoUltimaColuna + 3, currentY + 8, {
-      width: larguraValorTotal - 40,
+    doc.text(this.formatarMoeda(valorTotal), posicaoUltimaColuna + 3, currentY + 6, {
+      width: colunas[3].width - 40,
       align: 'right'
     });
 
-    doc.y = currentY + alturaTotal + 15;
-    }
+    doc.y = currentY + alturaLinha + 15;
+  }
+
   adicionarDadosCliente(doc, dados) {
-  doc
-    .fontSize(11)
-    .font('Helvetica-Bold')
-    .fillColor('#000000')
-    .text(`Cliente: ${dados.cliente}`, 70)
-    .moveDown(0.5)
-    .text(`Prazo de entrega: ${this.formatarData(dados.prazoEntrega)}`)
-    .moveDown(0.5)
-    .text(`Forma de Pagamento: ${dados.formaPagamento}`)
-    .moveDown(2);
-}
+    doc
+      .fontSize(11)
+      .font('Helvetica-Bold')
+      .fillColor('#000000')
+      .text(`Cliente: ${dados.cliente}`, 70)
+      .moveDown(0.5)
+      .text(`Prazo de entrega: ${this.formatarData(dados.prazoEntrega)}`)
+      .moveDown(0.5)
+      .text(`Forma de Pagamento: ${dados.formaPagamento}`)
+      .moveDown(2);
+  }
 
   adicionarAssinaturas(doc) {
-    // Verifica espaço na página
     if (doc.y > 600) {
       doc.addPage();
       doc.y = 100;
@@ -430,37 +473,37 @@ class GeradorOS {
   }
 
   adicionarImagensUsuario(doc, imagens) {
-  if (!imagens || imagens.length === 0) return;
+    if (!imagens || imagens.length === 0) return;
 
-  doc.addPage();
-  doc
-    .fontSize(14)
-    .font('Helvetica-Bold')
-    .text('Anexos do Cliente', { align: 'center' }); // REMOVI O EMOJI
-  doc.moveDown(2);
+    doc.addPage();
+    doc
+      .fontSize(14)
+      .font('Helvetica-Bold')
+      .text('Anexos do Cliente', { align: 'center' });
+    doc.moveDown(2);
 
-  let posY = 100;
-  for (const imagem of imagens) {
-    try {
-      const base64Data = imagem.data.replace(/^data:image\/[a-z]+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
+    let posY = 100;
+    for (const imagem of imagens) {
+      try {
+        const base64Data = imagem.data.replace(/^data:image\/[a-z]+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
 
-      if (posY > 650) {
-        doc.addPage();
-        posY = 100;
+        if (posY > 650) {
+          doc.addPage();
+          posY = 100;
+        }
+
+        doc.image(buffer, 100, posY, { 
+          fit: [400, 400], 
+          align: 'center', 
+          valign: 'center' 
+        });
+        posY += 420;
+      } catch (err) {
+        logger.error('Erro ao adicionar imagem do cliente:', err);
       }
-
-      doc.image(buffer, 100, posY, { 
-        fit: [400, 400], 
-        align: 'center', 
-        valign: 'center' 
-      });
-      posY += 420;
-    } catch (err) {
-      logger.error('Erro ao adicionar imagem do cliente:', err);
     }
   }
-}
 
   formatarMoeda(valor) {
     return parseFloat(valor).toLocaleString('pt-BR', {
@@ -479,12 +522,11 @@ class GeradorOS {
     }
   }
 
-    async listarOS() {
+  async listarOS() {
     try {
       await this.ensureOutputDir();
       const metadataPath = path.join(this.outputDir, 'metadata.json');
       
-      // Tentar carregar metadados
       let metadata = [];
       try {
         const data = await fs.promises.readFile(metadataPath, 'utf8');
@@ -502,7 +544,7 @@ class GeradorOS {
           const meta = metadata.find(m => m.osId === osId);
           
           return {
-            id: index + 1, // ID sequencial
+            id: index + 1,
             osId,
             cliente: meta ? meta.cliente : 'Desconhecido',
             valorTotal: meta ? meta.valorTotal : 0,

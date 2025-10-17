@@ -1,4 +1,4 @@
-// servidor-central/chatbot/messageHandler.js
+// servidor-central/chatbot/messageHandler.js - NOVO FLUXO FABRICAÇÃO/REFORMA
 const PlanilhaService = require('../excel/planilha');
 const CalendarService = require('../google_calendar/calendar');
 const logger = require('../utils/logger');
@@ -163,16 +163,30 @@ class MessageHandler {
         await this.handleInicio(session, client, userId);
         break;
 
-      case 'aguardando_servico':
-        await this.handleServico(messageBody, session, client, userId);
+      case 'aguardando_tipo_servico':
+        await this.handleTipoServico(messageBody, session, client, userId);
         break;
 
-      case 'aguardando_agendamento':
-        await this.handleAgendamento(messageBody, session, client, userId);
+      // FLUXO REFORMA
+      case 'aguardando_foto_reforma':
+        await this.handleFotoReforma(messageBody, session, client, userId);
         break;
 
-      case 'aguardando_data':
-        await this.handleData(messageBody, session, client, userId);
+      // FLUXO FABRICAÇÃO
+      case 'aguardando_tipo_estofado':
+        await this.handleTipoEstofado(messageBody, session, client, userId);
+        break;
+
+      case 'aguardando_tem_projeto':
+        await this.handleTemProjeto(messageBody, session, client, userId);
+        break;
+
+      case 'aguardando_tipo_reuniao':
+        await this.handleTipoReuniao(messageBody, session, client, userId);
+        break;
+
+      case 'aguardando_data_reuniao':
+        await this.handleDataReuniao(messageBody, session, client, userId);
         break;
 
       case 'finalizado':
@@ -187,90 +201,86 @@ class MessageHandler {
   async handleInicio(session, client, userId) {
     const menuMessage = `Olá ${session.data.nome}! 👋
 
-    Bem-vindo(a) à *Artestofados*, somos especializados em fabricação e reformas de.
+Bem-vindo(a) à *Artestofados*! 🛋️
 
-    Como posso ajudá-lo(a) hoje?`;
+Como podemos ajudá-lo(a) hoje?`;
 
-    // Enviar lista interativa de opções
+    // Lista interativa principal
     const optionList = {
-      title: 'Menu de Opções',
+      title: 'Nossos Serviços',
       buttonLabel: 'Ver opções',
       options: [
         {
-          id: 'orcamento',
-          title: 'Solicitar orçamento',
-          description: 'Receba um orçamento personalizado'
+          id: 'fabricacao',
+          title: '🏭 Fabricação',
+          description: 'Criação de móveis sob medida'
         },
         {
-          id: 'agendar',
-          title: 'Agendar visita',
-          description: 'Agende uma visita técnica'
-        },
-        {
-          id: 'consultar',
-          title: 'Consultar pedido',
-          description: 'Verifique o status do seu pedido'
-        },
-        {
-          id: 'atendente',
-          title: 'Falar com atendente',
-          description: 'Fale diretamente com nossa equipe'
+          id: 'reforma',
+          title: '🔧 Reforma',
+          description: 'Reforma de móveis existentes'
         }
       ]
     };
 
     await client.sendOptionList(userId, menuMessage, optionList);
-    session.step = 'aguardando_servico';
+    session.step = 'aguardando_tipo_servico';
   }
 
-  async handleServico(messageBody, session, client, userId) {
+  async handleTipoServico(messageBody, session, client, userId) {
     const opcao = messageBody.toLowerCase().trim();
 
     switch (opcao) {
-      case 'orcamento':
-      case '1':
-        session.data.servico = 'Orçamento';
+      case 'fabricacao':
+      case 'fabricação':
+        session.data.tipoServico = 'Fabricação';
         
-        // Enviar botões de sim/não
-        await client.sendButtonList(
+        await client.sendText(
           userId,
-          `Ótimo! Vou registrar sua solicitação de orçamento. 📋\n\nEm breve nossa equipe entrará em contato.\n\nGostaria de agendar uma visita?`,
-          [
-            { id: 'sim', label: 'Sim' },
-            { id: 'nao', label: 'Não' }
+          `Perfeito! Vamos criar algo especial para você! 🏭\n\nQue tipo de estofado você gostaria de fabricar?`
+        );
+        
+        // Lista de tipos de estofado
+        const tiposEstofado = {
+          title: 'Tipos de Estofados',
+          buttonLabel: 'Escolher tipo',
+          options: [
+            {
+              id: 'sofa',
+              title: '🛋️ Sofá',
+              description: 'Sofás de todos os tamanhos'
+            },
+            {
+              id: 'cadeira',
+              title: '🪑 Cadeira',
+              description: 'Cadeiras personalizadas'
+            },
+            {
+              id: 'poltrona',
+              title: '🛋️ Poltrona',
+              description: 'Poltronas confortáveis'
+            },
+            {
+              id: 'cama',
+              title: '🛏️ Cama',
+              description: 'Camas estofadas'
+            }
           ]
-        );
-        session.step = 'aguardando_agendamento';
+        };
+
+        await client.sendOptionList(userId, 'Selecione o tipo:', tiposEstofado);
+        session.step = 'aguardando_tipo_estofado';
         break;
 
-      case 'agendar':
-      case '2':
-        session.data.servico = 'Agendamento de visita';
+      case 'reforma':
+        session.data.tipoServico = 'Reforma';
+        
         await client.sendText(
           userId,
-          `Perfeito! Vou registrar seu agendamento. 📅\n\nPor favor, informe a data e horário desejado no formato:\nDD/MM/AAAA HH:MM\n\nExemplo: 15/10/2025 14:30`
+          `Ótima escolha! Vamos dar uma nova vida ao seu móvel! 🔧\n\n📷 *Por favor, envie uma foto do móvel que deseja reformar.*\n\nIsso nos ajudará a entender melhor o trabalho necessário.`
         );
-        session.step = 'aguardando_data';
-        break;
-
-      case 'consultar':
-      case '3':
-        session.data.servico = 'Consulta de pedido';
-        await client.sendText(
-          userId,
-          `Para consultar seu pedido, entre em contato pelo telefone: ${process.env.EMPRESA_TELEFONE || '(83) 3241-1234'}\n\nOu aguarde que um atendente irá lhe ajudar em breve.`
-        );
-        await this.finalizarAtendimento(session, client, userId);
-        break;
-
-      case 'atendente':
-      case '4':
-        session.data.servico = 'Atendimento humano';
-        await client.sendText(
-          userId,
-          `Um de nossos atendentes irá lhe responder em breve. 👤\n\nAguarde um momento, por favor.`
-        );
-        await this.finalizarAtendimento(session, client, userId);
+        
+        session.step = 'aguardando_foto_reforma';
         break;
 
       default:
@@ -283,25 +293,145 @@ class MessageHandler {
     }
   }
 
-  async handleAgendamento(messageBody, session, client, userId) {
-    const resposta = messageBody.toLowerCase().trim();
+  // ==================== FLUXO REFORMA ====================
 
-    if (resposta === 'sim' || resposta === 's') {
+  async handleFotoReforma(messageBody, session, client, userId) {
+    // Aqui você pode verificar se recebeu uma imagem
+    // Por enquanto, vamos assumir que qualquer mensagem é válida
+    
+    session.data.fotoEnviada = true;
+    
+    await client.sendText(
+      userId,
+      `📷 Foto recebida com sucesso!\n\n✅ Sua solicitação de reforma foi registrada.\n\n👨‍💼 *Um de nossos especialistas irá analisar a foto e entrar em contato em breve* para:\n\n• Avaliar o trabalho necessário\n• Fornecer um orçamento detalhado\n• Combinar os próximos passos\n\n⏰ *Tempo de resposta:* Até 2 horas úteis\n\nObrigado por escolher a Artestofados! 🛋️`
+    );
+
+    await this.finalizarAtendimento(session, client, userId);
+  }
+
+  // ==================== FLUXO FABRICAÇÃO ====================
+
+  async handleTipoEstofado(messageBody, session, client, userId) {
+    const tipos = {
+      'sofa': 'Sofá',
+      'cadeira': 'Cadeira', 
+      'poltrona': 'Poltrona',
+      'cama': 'Cama'
+    };
+
+    const opcao = messageBody.toLowerCase().trim();
+    
+    if (tipos[opcao]) {
+      session.data.tipoEstofado = tipos[opcao];
+      
       await client.sendText(
         userId,
-        `Por favor, informe a data e horário desejado no formato:\nDD/MM/AAAA HH:MM\n\nExemplo: 15/10/2025 14:30`
+        `Excelente escolha! ${tipos[opcao]} é uma das nossas especialidades! 🎯\n\nVocê já tem um projeto ou desenho do que deseja?`
       );
-      session.step = 'aguardando_data';
+
+      // Lista Sim/Não para projeto
+      const temProjeto = {
+        title: 'Projeto Próprio',
+        buttonLabel: 'Responder',
+        options: [
+          {
+            id: 'sim_projeto',
+            title: '✅ Sim',
+            description: 'Tenho projeto/desenho'
+          },
+          {
+            id: 'nao_projeto',
+            title: '❌ Não',
+            description: 'Preciso de ajuda com o projeto'
+          }
+        ]
+      };
+
+      await client.sendOptionList(userId, 'Sobre o projeto:', temProjeto);
+      session.step = 'aguardando_tem_projeto';
     } else {
       await client.sendText(
         userId,
-        `Entendido! Sua solicitação foi registrada. ✅\n\nEm breve nossa equipe entrará em contato.\n\nObrigado por escolher a Artestofados! 🛋️`
+        `Opção inválida. Por favor, selecione um dos tipos disponíveis.`
       );
-      await this.finalizarAtendimento(session, client, userId);
+      // Voltar para escolha de tipo
+      session.step = 'aguardando_tipo_servico';
+      await this.handleTipoServico('fabricacao', session, client, userId);
     }
   }
 
-  async handleData(messageBody, session, client, userId) {
+  async handleTemProjeto(messageBody, session, client, userId) {
+    const opcao = messageBody.toLowerCase().trim();
+
+    if (opcao === 'sim_projeto' || opcao === 'sim') {
+      session.data.temProjeto = true;
+      await client.sendText(
+        userId,
+        `Perfeito! Com projeto fica ainda melhor! 📐\n\nVamos agendar uma conversa para detalhar tudo?`
+      );
+    } else if (opcao === 'nao_projeto' || opcao === 'não' || opcao === 'nao') {
+      session.data.temProjeto = false;
+      await client.sendText(
+        userId,
+        `Sem problemas! Nossos designers irão ajudá-lo a criar o projeto perfeito! 🎨\n\nVamos agendar uma conversa para entender suas necessidades?`
+      );
+    } else {
+      await client.sendText(
+        userId,
+        `Por favor, responda se você tem ou não um projeto.`
+      );
+      return;
+    }
+
+    // Lista tipo de reunião
+    const tipoReuniao = {
+      title: 'Tipo de Atendimento',
+      buttonLabel: 'Escolher',
+      options: [
+        {
+          id: 'online',
+          title: '💻 Reunião Online',
+          description: 'Videoconferência pelo WhatsApp/Meet'
+        },
+        {
+          id: 'presencial',
+          title: '🏠 Visita Presencial',
+          description: 'Visita técnica no local'
+        }
+      ]
+    };
+
+    await client.sendOptionList(userId, 'Como prefere conversar?', tipoReuniao);
+    session.step = 'aguardando_tipo_reuniao';
+  }
+
+  async handleTipoReuniao(messageBody, session, client, userId) {
+    const opcao = messageBody.toLowerCase().trim();
+
+    if (opcao === 'online') {
+      session.data.tipoReuniao = 'Reunião Online';
+      await client.sendText(
+        userId,
+        `Ótimo! Reunião online é prática e rápida! 💻\n\n📅 *Por favor, informe sua preferência de data e horário:*\n\nFormato: DD/MM/AAAA HH:MM\nExemplo: 25/10/2025 14:30`
+      );
+    } else if (opcao === 'presencial') {
+      session.data.tipoReuniao = 'Visita Presencial';
+      await client.sendText(
+        userId,
+        `Excelente! Nossa equipe fará uma visita técnica! 🏠\n\n📅 *Por favor, informe sua preferência de data e horário:*\n\nFormato: DD/MM/AAAA HH:MM\nExemplo: 25/10/2025 14:30\n\n📍 *Obs:* Atendemos João Pessoa e região metropolitana`
+      );
+    } else {
+      await client.sendText(
+        userId,
+        `Opção inválida. Por favor, escolha entre reunião online ou visita presencial.`
+      );
+      return;
+    }
+
+    session.step = 'aguardando_data_reuniao';
+  }
+
+  async handleDataReuniao(messageBody, session, client, userId) {
     const dataTexto = messageBody.trim();
     
     const regexData = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/;
@@ -310,15 +440,31 @@ class MessageHandler {
     if (match) {
       session.data.dataAgendamento = dataTexto;
       
+      const tipoReuniao = session.data.tipoReuniao;
+      const tipoEstofado = session.data.tipoEstofado;
+      const temProjeto = session.data.temProjeto ? 'Sim' : 'Não';
+      
       await client.sendText(
         userId,
-        `Agendamento confirmado para: ${dataTexto} ✅\n\nSua solicitação foi registrada com sucesso!\n\nEm breve confirmaremos seu agendamento.\n\nObrigado por escolher a Artestofados! 🛋️`
+        `🎉 *Agendamento Confirmado!*\n\n` +
+        `📋 *Resumo do seu pedido:*\n` +
+        `• Serviço: Fabricação de ${tipoEstofado}\n` +
+        `• Projeto próprio: ${temProjeto}\n` +
+        `• Tipo: ${tipoReuniao}\n` +
+        `• Data/Hora: ${dataTexto}\n\n` +
+        `✅ *Próximos passos:*\n` +
+        `• Confirmaremos o agendamento em até 2 horas\n` +
+        `• Enviaremos o link da reunião (se online)\n` +
+        `• Nossa equipe entrará em contato\n\n` +
+        `📞 Dúvidas? Entre em contato: ${process.env.EMPRESA_TELEFONE || '(83) 3241-1234'}\n\n` +
+        `Obrigado por escolher a Artestofados! 🛋️`
       );
 
+      // Tentar criar evento no calendário
       try {
         await this.calendarService.createEvent({
-          summary: `Visita - ${session.data.nome}`,
-          description: `Cliente: ${session.data.nome}\nTelefone: ${session.data.telefone}\nServiço: ${session.data.servico}`,
+          summary: `${tipoReuniao} - ${session.data.nome}`,
+          description: `Cliente: ${session.data.nome}\nTelefone: ${session.data.telefone}\nServiço: Fabricação de ${tipoEstofado}\nProjeto próprio: ${temProjeto}\nTipo: ${tipoReuniao}`,
           start: this.parseDateTime(dataTexto),
           attendee: session.data.nome
         });
@@ -330,29 +476,46 @@ class MessageHandler {
     } else {
       await client.sendText(
         userId,
-        `Data inválida. Por favor, use o formato: DD/MM/AAAA HH:MM\n\nExemplo: 15/10/2025 14:30`
+        `📅 Formato de data inválido.\n\n*Por favor, use o formato:* DD/MM/AAAA HH:MM\n\n*Exemplo:* 25/10/2025 14:30`
       );
     }
   }
+
+  // ==================== FINALIZAÇÃO ====================
 
   async finalizarAtendimento(session, client, userId) {
     try {
       await this.planilhaService.addAtendimento({
         nome: session.data.nome,
         telefone: session.data.telefone,
-        servico: session.data.servico,
+        servico: session.data.tipoServico,
+        detalhes: this.gerarDetalhesAtendimento(session.data),
         dataAtendimento: session.data.dataAtendimento,
         dataAgendamento: session.data.dataAgendamento || 'N/A',
         status: 'Pendente'
       });
 
-      logger.info(`Atendimento finalizado para ${session.data.nome}`);
+      logger.info(`Atendimento finalizado para ${session.data.nome} - ${session.data.tipoServico}`);
       this.userSessions.delete(userId);
 
     } catch (error) {
       logger.error('Erro ao finalizar atendimento:', error);
       await client.sendText(userId, 'Erro ao registrar atendimento. Por favor, tente novamente.');
     }
+  }
+
+  gerarDetalhesAtendimento(data) {
+    let detalhes = `Tipo: ${data.tipoServico}`;
+    
+    if (data.tipoServico === 'Fabricação') {
+      detalhes += ` | Estofado: ${data.tipoEstofado}`;
+      detalhes += ` | Projeto próprio: ${data.temProjeto ? 'Sim' : 'Não'}`;
+      detalhes += ` | Reunião: ${data.tipoReuniao}`;
+    } else if (data.tipoServico === 'Reforma') {
+      detalhes += ` | Foto enviada: ${data.fotoEnviada ? 'Sim' : 'Não'}`;
+    }
+    
+    return detalhes;
   }
 
   parseDateTime(dateTimeStr) {

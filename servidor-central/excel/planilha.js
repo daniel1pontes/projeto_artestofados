@@ -35,13 +35,14 @@ class PlanilhaService {
   async createNewWorkbook(workbook) {
     const worksheet = workbook.addWorksheet('Atendimentos');
 
-    // Definir colunas
+    // Definir colunas - ATUALIZADO para novo fluxo
     worksheet.columns = [
       { header: 'ID', key: 'id', width: 10 },
       { header: 'Data Atendimento', key: 'dataAtendimento', width: 20 },
       { header: 'Nome', key: 'nome', width: 30 },
       { header: 'Telefone', key: 'telefone', width: 15 },
-      { header: 'Serviço', key: 'servico', width: 30 },
+      { header: 'Serviço', key: 'servico', width: 20 },
+      { header: 'Detalhes', key: 'detalhes', width: 40 },
       { header: 'Data Agendamento', key: 'dataAgendamento', width: 20 },
       { header: 'Status', key: 'status', width: 15 }
     ];
@@ -75,6 +76,7 @@ class PlanilhaService {
         nome: dados.nome,
         telefone: dados.telefone,
         servico: dados.servico,
+        detalhes: dados.detalhes || '',
         dataAgendamento: dados.dataAgendamento,
         status: dados.status || 'Pendente'
       });
@@ -82,7 +84,7 @@ class PlanilhaService {
       // Salvar arquivo
       await workbook.xlsx.writeFile(this.filePath);
       
-      logger.info(`Atendimento #${newId} adicionado à planilha`);
+      logger.info(`Atendimento #${newId} adicionado à planilha - ${dados.servico}`);
       return newId;
 
     } catch (error) {
@@ -107,6 +109,7 @@ class PlanilhaService {
           nome: row.getCell('nome').value,
           telefone: row.getCell('telefone').value,
           servico: row.getCell('servico').value,
+          detalhes: row.getCell('detalhes').value || '',
           dataAgendamento: row.getCell('dataAgendamento').value,
           status: row.getCell('status').value
         };
@@ -155,6 +158,9 @@ class PlanilhaService {
       return false;
     }
     if (filtros.status && atendimento.status !== filtros.status) {
+      return false;
+    }
+    if (filtros.servico && atendimento.servico !== filtros.servico) {
       return false;
     }
     return true;

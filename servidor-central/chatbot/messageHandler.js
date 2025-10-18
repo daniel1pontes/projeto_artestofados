@@ -1,4 +1,4 @@
-// servidor-central/chatbot/messageHandler.js - NOVO FLUXO FABRICAÇÃO/REFORMA
+// servidor-central/chatbot/messageHandler.js - VERSÃO CORRIGIDA FLUXO BOTÕES
 const PlanilhaService = require('../excel/planilha');
 const CalendarService = require('../google_calendar/calendar');
 const logger = require('../utils/logger');
@@ -24,9 +24,18 @@ class MessageHandler {
       
       // Limpar número de telefone (remover @c.us se vier)
       const userId = phone.replace('@c.us', '');
-      const messageBody = selectedRowId || text?.message || '';
+      
+      // CORREÇÃO: Priorizar selectedRowId (resposta de botão) sobre texto
+      let messageBody = '';
+      if (selectedRowId) {
+        messageBody = selectedRowId; // Resposta de botão/lista
+        logger.info(`📱 Resposta de botão recebida: ${selectedRowId}`);
+      } else if (text?.message) {
+        messageBody = text.message; // Mensagem de texto normal
+        logger.info(`💬 Mensagem de texto recebida: ${text.message}`);
+      }
 
-      logger.info(`Mensagem recebida de ${senderName}: ${messageBody}`);
+      logger.info(`Mensagem processada de ${senderName}: ${messageBody}`);
 
       // REGRA 2: VERIFICAR SE ADMIN ENVIOU MENSAGEM
       if (fromMe) {
@@ -158,6 +167,8 @@ class MessageHandler {
   // ==================== PROCESSAMENTO DE FLUXO ====================
 
   async processStep(messageBody, session, client, userId) {
+    logger.info(`🔄 Processando step: ${session.step} | Mensagem: ${messageBody}`);
+    
     switch (session.step) {
       case 'inicio':
         await this.handleInicio(session, client, userId);
@@ -194,6 +205,7 @@ class MessageHandler {
         break;
 
       default:
+        logger.warn(`Step desconhecido: ${session.step}`);
         await this.handleInicio(session, client, userId);
     }
   }
@@ -228,68 +240,67 @@ Como podemos ajudá-lo(a) hoje?`;
   }
 
   async handleTipoServico(messageBody, session, client, userId) {
+    // CORREÇÃO: Verificar tanto IDs de botão quanto texto digitado
     const opcao = messageBody.toLowerCase().trim();
 
-    switch (opcao) {
-      case 'fabricacao':
-      case 'fabricação':
-        session.data.tipoServico = 'Fabricação';
-        
-        await client.sendText(
-          userId,
-          `Perfeito! Vamos criar algo especial para você! 🏭\n\nQue tipo de estofado você gostaria de fabricar?`
-        );
-        
-        // Lista de tipos de estofado
-        const tiposEstofado = {
-          title: 'Tipos de Estofados',
-          buttonLabel: 'Escolher tipo',
-          options: [
-            {
-              id: 'sofa',
-              title: '🛋️ Sofá',
-              description: 'Sofás de todos os tamanhos'
-            },
-            {
-              id: 'cadeira',
-              title: '🪑 Cadeira',
-              description: 'Cadeiras personalizadas'
-            },
-            {
-              id: 'poltrona',
-              title: '🛋️ Poltrona',
-              description: 'Poltronas confortáveis'
-            },
-            {
-              id: 'cama',
-              title: '🛏️ Cama',
-              description: 'Camas estofadas'
-            }
-          ]
-        };
+    logger.info(`🔍 Verificando tipo de serviço: ${opcao}`);
 
-        await client.sendOptionList(userId, 'Selecione o tipo:', tiposEstofado);
-        session.step = 'aguardando_tipo_estofado';
-        break;
+    if (opcao === 'fabricacao' || opcao === 'fabricação') {
+      session.data.tipoServico = 'Fabricação';
+      
+      await client.sendText(
+        userId,
+        `Perfeito! Vamos criar algo especial para você! 🏭\n\nQue tipo de estofado você gostaria de fabricar?`
+      );
+      
+      // Lista de tipos de estofado
+      const tiposEstofado = {
+        title: 'Tipos de Estofados',
+        buttonLabel: 'Escolher tipo',
+        options: [
+          {
+            id: 'sofa',
+            title: '🛋️ Sofá',
+            description: 'Sofás de todos os tamanhos'
+          },
+          {
+            id: 'cadeira',
+            title: '🪑 Cadeira',
+            description: 'Cadeiras personalizadas'
+          },
+          {
+            id: 'poltrona',
+            title: '🛋️ Poltrona',
+            description: 'Poltronas confortáveis'
+          },
+          {
+            id: 'cama',
+            title: '🛏️ Cama',
+            description: 'Camas estofadas'
+          }
+        ]
+      };
 
-      case 'reforma':
-        session.data.tipoServico = 'Reforma';
-        
-        await client.sendText(
-          userId,
-          `Ótima escolha! Vamos dar uma nova vida ao seu móvel! 🔧\n\n📷 *Por favor, envie uma foto do móvel que deseja reformar.*\n\nIsso nos ajudará a entender melhor o trabalho necessário.`
-        );
-        
-        session.step = 'aguardando_foto_reforma';
-        break;
-
-      default:
-        await client.sendText(
-          userId,
-          `Opção inválida. Por favor, selecione uma das opções do menu.`
-        );
-        await this.handleInicio(session, client, userId);
-        break;
+      await client.sendOptionList(userId, 'Selecione o tipo:', tiposEstofado);
+      session.step = 'aguardando_tipo_estofado';
+      
+    } else if (opcao === 'reforma') {
+      session.data.tipoServico = 'Reforma';
+      
+      await client.sendText(
+        userId,
+        `Ótima escolha! Vamos dar uma nova vida ao seu móvel! 🔧\n\n📷 *Por favor, envie uma foto do móvel que deseja reformar.*\n\nIsso nos ajudará a entender melhor o trabalho necessário.`
+      );
+      
+      session.step = 'aguardando_foto_reforma';
+      
+    } else {
+      logger.warn(`Opção inválida recebida: ${opcao}`);
+      await client.sendText(
+        userId,
+        `Opção inválida. Por favor, selecione uma das opções do menu.`
+      );
+      await this.handleInicio(session, client, userId);
     }
   }
 
@@ -320,6 +331,7 @@ Como podemos ajudá-lo(a) hoje?`;
     };
 
     const opcao = messageBody.toLowerCase().trim();
+    logger.info(`🔍 Verificando tipo de estofado: ${opcao}`);
     
     if (tipos[opcao]) {
       session.data.tipoEstofado = tipos[opcao];
@@ -350,6 +362,7 @@ Como podemos ajudá-lo(a) hoje?`;
       await client.sendOptionList(userId, 'Sobre o projeto:', temProjeto);
       session.step = 'aguardando_tem_projeto';
     } else {
+      logger.warn(`Tipo de estofado inválido: ${opcao}`);
       await client.sendText(
         userId,
         `Opção inválida. Por favor, selecione um dos tipos disponíveis.`
@@ -362,6 +375,7 @@ Como podemos ajudá-lo(a) hoje?`;
 
   async handleTemProjeto(messageBody, session, client, userId) {
     const opcao = messageBody.toLowerCase().trim();
+    logger.info(`🔍 Verificando se tem projeto: ${opcao}`);
 
     if (opcao === 'sim_projeto' || opcao === 'sim') {
       session.data.temProjeto = true;
@@ -376,6 +390,7 @@ Como podemos ajudá-lo(a) hoje?`;
         `Sem problemas! Nossos designers irão ajudá-lo a criar o projeto perfeito! 🎨\n\nVamos agendar uma conversa para entender suas necessidades?`
       );
     } else {
+      logger.warn(`Resposta de projeto inválida: ${opcao}`);
       await client.sendText(
         userId,
         `Por favor, responda se você tem ou não um projeto.`
@@ -407,6 +422,7 @@ Como podemos ajudá-lo(a) hoje?`;
 
   async handleTipoReuniao(messageBody, session, client, userId) {
     const opcao = messageBody.toLowerCase().trim();
+    logger.info(`🔍 Verificando tipo de reunião: ${opcao}`);
 
     if (opcao === 'online') {
       session.data.tipoReuniao = 'Reunião Online';
@@ -421,6 +437,7 @@ Como podemos ajudá-lo(a) hoje?`;
         `Excelente! Nossa equipe fará uma visita técnica! 🏠\n\n📅 *Por favor, informe sua preferência de data e horário:*\n\nFormato: DD/MM/AAAA HH:MM\nExemplo: 25/10/2025 14:30\n\n📍 *Obs:* Atendemos João Pessoa e região metropolitana`
       );
     } else {
+      logger.warn(`Tipo de reunião inválido: ${opcao}`);
       await client.sendText(
         userId,
         `Opção inválida. Por favor, escolha entre reunião online ou visita presencial.`
@@ -433,6 +450,7 @@ Como podemos ajudá-lo(a) hoje?`;
 
   async handleDataReuniao(messageBody, session, client, userId) {
     const dataTexto = messageBody.trim();
+    logger.info(`🔍 Verificando data de reunião: ${dataTexto}`);
     
     const regexData = /(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/;
     const match = dataTexto.match(regexData);
@@ -474,6 +492,7 @@ Como podemos ajudá-lo(a) hoje?`;
 
       await this.finalizarAtendimento(session, client, userId);
     } else {
+      logger.warn(`Formato de data inválido: ${dataTexto}`);
       await client.sendText(
         userId,
         `📅 Formato de data inválido.\n\n*Por favor, use o formato:* DD/MM/AAAA HH:MM\n\n*Exemplo:* 25/10/2025 14:30`

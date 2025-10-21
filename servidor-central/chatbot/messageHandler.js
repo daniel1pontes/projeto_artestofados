@@ -1,59 +1,57 @@
-// servidor-central/chatbot/messageHandler.js - VERSÃO CORRIGIDA FLUXO BOTÕES
 const PlanilhaService = require('../excel/planilha');
+const PausadosRepository = require('../database/repositories/pausadosRepository');
 const CalendarService = require('../google_calendar/calendar');
 const logger = require('../utils/logger');
 
 class MessageHandler {
   constructor() {
     this.planilhaService = new PlanilhaService();
+    this.pausadosRepo = new PausadosRepository();
     this.calendarService = new CalendarService();
     this.userSessions = new Map();
-    this.pausedUsers = new Map();
   }
 
   async handle(webhookData, client) {
     try {
-      // Estrutura do webhook Z-API
       const { phone, senderName, isGroup, fromMe, text, selectedRowId } = webhookData;
 
-      // REGRA 1: IGNORAR GRUPOS
+      // Ignorar grupos
       if (isGroup) {
         logger.info(`Mensagem de grupo ignorada`);
         return;
       }
       
-      // Limpar número de telefone (remover @c.us se vier)
       const userId = phone.replace('@c.us', '');
       
-      // CORREÇÃO: Priorizar selectedRowId (resposta de botão) sobre texto
+      // Priorizar selectedRowId (resposta de botão) sobre texto
       let messageBody = '';
       if (selectedRowId) {
-        messageBody = selectedRowId; // Resposta de botão/lista
+        messageBody = selectedRowId;
         logger.info(`📱 Resposta de botão recebida: ${selectedRowId}`);
       } else if (text?.message) {
-        messageBody = text.message; // Mensagem de texto normal
+        messageBody = text.message;
         logger.info(`💬 Mensagem de texto recebida: ${text.message}`);
       }
 
       logger.info(`Mensagem processada de ${senderName}: ${messageBody}`);
 
-      // REGRA 2: VERIFICAR SE ADMIN ENVIOU MENSAGEM
+      // Verificar se admin enviou mensagem
       if (fromMe) {
-        this.pauseUserBot(userId, senderName);
+        await this.pausarUsuario(userId, senderName);
         logger.info(`Admin respondeu no chat com ${senderName}. Bot pausado por 2h.`);
         return;
       }
       
-      // VERIFICAR PAUSA GLOBAL
+      // Verificar pausa global
       if (global.botGloballyPaused) {
         logger.info(`Bot pausado globalmente. Ignorando mensagem de ${senderName}`);
         return;
       }
 
-      // VERIFICAR SE USUÁRIO ESTÁ PAUSADO
-      if (this.isUserPaused(userId)) {
-        const remainingTime = this.getRemainingPauseTime(userId);
-        logger.info(`Usuário ${senderName} está pausado. Tempo restante: ${remainingTime} min`);
+      // Verificar se usuário está pausado
+      const pausaInfo = await this.pausadosRepo.verificarUsuarioPausado(userId);
+      if (pausaInfo.pausado) {
+        logger.info(`Usuário ${senderName} está pausado. Tempo restante: ${pausaInfo.minutosRestantes} min`);
         return;
       }
 
@@ -72,10 +70,10 @@ class MessageHandler {
         this.userSessions.set(userId, session);
       }
 
-      // COMANDOS ESPECIAIS
+      // Comandos especiais
       if (messageBody.toLowerCase() === '#ativar') {
-        const resumed = this.resumeUserBot(userId);
-        if (resumed) {
+        const reativado = await this.pausadosRepo.reativarUsuario(userId);
+        if (reativado) {
           await client.sendText(userId, `✅ Bot reativado com sucesso!\n\nO atendimento automático está funcionando novamente.`);
         } else {
           await client.sendText(userId, `ℹ️ O bot já está ativo para este chat.`);
@@ -91,81 +89,59 @@ class MessageHandler {
     }
   }
 
-  // ==================== MÉTODOS DE CONTROLE DE PAUSA ====================
-
-  pauseUserBot(userId, userName) {
-    const pauseUntil = new Date();
-    pauseUntil.setHours(pauseUntil.getHours() + 2);
-
-    this.pausedUsers.set(userId, {
-      pausedAt: new Date(),
-      pauseUntil: pauseUntil,
-      userName: userName
-    });
-
-    logger.info(`Bot pausado para ${userName} até ${pauseUntil.toLocaleString('pt-BR')}`);
-  }
-
-  resumeUserBot(userId) {
-    if (this.pausedUsers.has(userId)) {
-      const userData = this.pausedUsers.get(userId);
-      this.pausedUsers.delete(userId);
-      logger.info(`Bot reativado manualmente para ${userData.userName}`);
-      return true;
+  // Métodos de controle de pausa usando PostgreSQL
+  async pausarUsuario(userId, userName) {
+    try {
+      await this.pausadosRepo.pausarUsuario(userId, userName, 2); // 2 horas
+      logger.info(`Bot pausado para ${userName} por 2 horas`);
+    } catch (error) {
+      logger.error('Erro ao pausar usuário:', error);
     }
-    return false;
   }
 
-  isUserPaused(userId) {
-    if (!this.pausedUsers.has(userId)) {
+  async reativarUsuario(userId) {
+    try {
+      const reativado = await this.pausadosRepo.reativarUsuario(userId);
+      return reativado;
+    } catch (error) {
+      logger.error('Erro ao reativar usuário:', error);
       return false;
     }
-
-    const pauseData = this.pausedUsers.get(userId);
-    const now = new Date();
-
-    if (now >= pauseData.pauseUntil) {
-      this.pausedUsers.delete(userId);
-      logger.info(`Pausa expirou automaticamente para ${pauseData.userName}`);
-      return false;
-    }
-
-    return true;
   }
 
-  getRemainingPauseTime(userId) {
-    if (!this.pausedUsers.has(userId)) {
+  async listarUsuariosPausados() {
+    try {
+      return await this.pausadosRepo.listarUsuariosPausados();
+    } catch (error) {
+      logger.error('Erro ao listar usuários pausados:', error);
+      return [];
+    }
+  }
+
+  async contarUsuariosPausados() {
+    try {
+      return await this.pausadosRepo.contarUsuariosPausados();
+    } catch (error) {
+      logger.error('Erro ao contar usuários pausados:', error);
       return 0;
     }
-
-    const pauseData = this.pausedUsers.get(userId);
-    const now = new Date();
-    const remaining = pauseData.pauseUntil - now;
-    
-    return Math.ceil(remaining / (1000 * 60));
   }
 
-  startAutoCleanup() {
-    setInterval(() => {
-      const now = new Date();
-      let cleaned = 0;
-
-      for (const [userId, pauseData] of this.pausedUsers.entries()) {
-        if (now >= pauseData.pauseUntil) {
-          this.pausedUsers.delete(userId);
-          cleaned++;
-          logger.info(`Limpeza automática: Pausa expirada para ${pauseData.userName}`);
+  // Limpeza automática de pausas expiradas
+  async iniciarLimpezaAutomatica() {
+    setInterval(async () => {
+      try {
+        const removidas = await this.pausadosRepo.limparPausasExpiradas();
+        if (removidas > 0) {
+          logger.info(`Limpeza automática: ${removidas} pausas expiradas removidas`);
         }
+      } catch (error) {
+        logger.error('Erro na limpeza automática:', error);
       }
-
-      if (cleaned > 0) {
-        logger.info(`Limpeza automática: ${cleaned} pausas expiradas removidas`);
-      }
-    }, 10 * 60 * 1000);
+    }, 10 * 60 * 1000); // A cada 10 minutos
   }
 
-  // ==================== PROCESSAMENTO DE FLUXO ====================
-
+  // Métodos do fluxo de conversação (mantidos iguais)
   async processStep(messageBody, session, client, userId) {
     logger.info(`🔄 Processando step: ${session.step} | Mensagem: ${messageBody}`);
     
@@ -178,12 +154,10 @@ class MessageHandler {
         await this.handleTipoServico(messageBody, session, client, userId);
         break;
 
-      // FLUXO REFORMA
       case 'aguardando_foto_reforma':
         await this.handleFotoReforma(messageBody, session, client, userId);
         break;
 
-      // FLUXO FABRICAÇÃO
       case 'aguardando_tipo_estofado':
         await this.handleTipoEstofado(messageBody, session, client, userId);
         break;
@@ -217,7 +191,6 @@ Bem-vindo(a) à *Artestofados*! 🛋️
 
 Como podemos ajudá-lo(a) hoje?`;
 
-    // Lista interativa principal
     const optionList = {
       title: 'Nossos Serviços',
       buttonLabel: 'Ver opções',
@@ -240,7 +213,6 @@ Como podemos ajudá-lo(a) hoje?`;
   }
 
   async handleTipoServico(messageBody, session, client, userId) {
-    // CORREÇÃO: Verificar tanto IDs de botão quanto texto digitado
     const opcao = messageBody.toLowerCase().trim();
 
     logger.info(`🔍 Verificando tipo de serviço: ${opcao}`);
@@ -253,7 +225,6 @@ Como podemos ajudá-lo(a) hoje?`;
         `Perfeito! Vamos criar algo especial para você! 🏭\n\nQue tipo de estofado você gostaria de fabricar?`
       );
       
-      // Lista de tipos de estofado
       const tiposEstofado = {
         title: 'Tipos de Estofados',
         buttonLabel: 'Escolher tipo',
@@ -304,12 +275,7 @@ Como podemos ajudá-lo(a) hoje?`;
     }
   }
 
-  // ==================== FLUXO REFORMA ====================
-
   async handleFotoReforma(messageBody, session, client, userId) {
-    // Aqui você pode verificar se recebeu uma imagem
-    // Por enquanto, vamos assumir que qualquer mensagem é válida
-    
     session.data.fotoEnviada = true;
     
     await client.sendText(
@@ -319,8 +285,6 @@ Como podemos ajudá-lo(a) hoje?`;
 
     await this.finalizarAtendimento(session, client, userId);
   }
-
-  // ==================== FLUXO FABRICAÇÃO ====================
 
   async handleTipoEstofado(messageBody, session, client, userId) {
     const tipos = {
@@ -341,7 +305,6 @@ Como podemos ajudá-lo(a) hoje?`;
         `Excelente escolha! ${tipos[opcao]} é uma das nossas especialidades! 🎯\n\nVocê já tem um projeto ou desenho do que deseja?`
       );
 
-      // Lista Sim/Não para projeto
       const temProjeto = {
         title: 'Projeto Próprio',
         buttonLabel: 'Responder',
@@ -367,7 +330,6 @@ Como podemos ajudá-lo(a) hoje?`;
         userId,
         `Opção inválida. Por favor, selecione um dos tipos disponíveis.`
       );
-      // Voltar para escolha de tipo
       session.step = 'aguardando_tipo_servico';
       await this.handleTipoServico('fabricacao', session, client, userId);
     }
@@ -398,7 +360,6 @@ Como podemos ajudá-lo(a) hoje?`;
       return;
     }
 
-    // Lista tipo de reunião
     const tipoReuniao = {
       title: 'Tipo de Atendimento',
       buttonLabel: 'Escolher',
@@ -500,8 +461,6 @@ Como podemos ajudá-lo(a) hoje?`;
     }
   }
 
-  // ==================== FINALIZAÇÃO ====================
-
   async finalizarAtendimento(session, client, userId) {
     try {
       await this.planilhaService.addAtendimento({
@@ -545,28 +504,21 @@ Como podemos ajudá-lo(a) hoje?`;
     return new Date(year, month - 1, day, hour, minute);
   }
 
+  // Métodos de compatibilidade para manter a interface anterior
   getPausedUsersCount() {
-    return this.pausedUsers.size;
+    return this.contarUsuariosPausados();
   }
 
   getPausedUsersList() {
-    const list = [];
-    const now = new Date();
+    return this.listarUsuariosPausados();
+  }
 
-    for (const [userId, pauseData] of this.pausedUsers.entries()) {
-      const remaining = pauseData.pauseUntil - now;
-      const minutesRemaining = Math.ceil(remaining / (1000 * 60));
+  resumeUserBot(userId) {
+    return this.reativarUsuario(userId);
+  }
 
-      list.push({
-        userId,
-        userName: pauseData.userName,
-        pausedAt: pauseData.pausedAt,
-        pauseUntil: pauseData.pauseUntil,
-        minutesRemaining: minutesRemaining > 0 ? minutesRemaining : 0
-      });
-    }
-
-    return list;
+  startAutoCleanup() {
+    return this.iniciarLimpezaAutomatica();
   }
 }
 

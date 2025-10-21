@@ -1,4 +1,3 @@
-// servidor-central/index.js - VERSÃO COMPLETA COM Z-API
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -7,6 +6,8 @@ const fs = require('fs').promises;
 const WhatsAppBot = require('./chatbot/whatsappBot');
 const GeradorOS = require('./gerador_os/geradorOS');
 const PlanilhaService = require('./excel/planilha');
+const PausadosRepository = require('./database/repositories/pausadosRepository');
+const database = require('./database/config');
 const logger = require('./utils/logger');
 
 class ServidorCentral {
@@ -16,9 +17,21 @@ class ServidorCentral {
     this.bot = null;
     this.geradorOS = new GeradorOS();
     this.planilhaService = new PlanilhaService();
+    this.pausadosRepo = new PausadosRepository();
     this.qrCodeData = null;
     this.dataDir = path.join(__dirname, 'data');
     this.osDir = path.join(this.dataDir, 'ordens_servico');
+  }
+
+  async initializeDatabase() {
+    try {
+      await database.connect();
+      logger.info('✅ Banco de dados conectado com sucesso');
+      return true;
+    } catch (error) {
+      logger.error('❌ Erro ao conectar com banco de dados:', error);
+      throw error;
+    }
   }
 
   async setupDirectories() {
@@ -105,7 +118,7 @@ class ServidorCentral {
         this.bot = new WhatsAppBot(onQRCodeUpdate);
         await this.bot.initialize();
         
-        const webhookUrl = `${process.env.SERVER_URL || 'http://177.35.39.181:4000 '}/api/bot/webhook`;
+        const webhookUrl = `${process.env.SERVER_URL || 'http://177.35.39.181:4000'}/api/bot/webhook`;
         await this.bot.setupWebhook(webhookUrl);
         
         logger.info('Bot iniciado via API - Nova sessão criada');
@@ -157,7 +170,6 @@ class ServidorCentral {
     this.app.post('/api/bot/webhook', async (req, res) => {
       try {
         logger.info('📥 Webhook recebido da Z-API');
-        logger.info('📄 Dados recebidos:', JSON.stringify(req.body, null, 2));
         
         if (!this.bot) {
           logger.warn('⚠️ Bot não está ativo, ignorando webhook');
@@ -167,7 +179,6 @@ class ServidorCentral {
           });
         }
 
-        // Verificar se é uma mensagem válida
         if (!req.body.phone || !req.body.text?.message) {
           logger.warn('⚠️ Webhook inválido - dados incompletos');
           return res.status(200).json({ 
@@ -188,16 +199,9 @@ class ServidorCentral {
 
     // ==================== CONTROLE DE USUÁRIOS PAUSADOS ====================
     
-    this.app.get('/api/bot/paused-users', (req, res) => {
+    this.app.get('/api/bot/paused-users', async (req, res) => {
       try {
-        if (!this.bot) {
-          return res.json({ 
-            success: true, 
-            pausedUsers: [] 
-          });
-        }
-
-        const pausedUsers = this.bot.getPausedUsers();
+        const pausedUsers = await this.pausadosRepo.listarUsuariosPausados();
         
         res.json({
           success: true,
@@ -215,15 +219,8 @@ class ServidorCentral {
 
     this.app.post('/api/bot/resume-user/:userId', async (req, res) => {
       try {
-        if (!this.bot) {
-          return res.json({ 
-            success: false, 
-            message: 'Bot não está conectado' 
-          });
-        }
-
         const userId = req.params.userId;
-        const resumed = this.bot.messageHandler.resumeUserBot(userId);
+        const resumed = await this.pausadosRepo.reativarUsuario(userId);
         
         if (resumed) {
           logger.info(`Bot reativado manualmente para usuário: ${userId}`);
@@ -301,16 +298,10 @@ class ServidorCentral {
       try {
         const lista = await this.geradorOS.listarOS();
         
-        const listaComUrls = await Promise.all(lista.map(async os => {
-          const filePath = path.join(this.osDir, os.arquivo);
-          const fileExists = await fs.access(filePath).then(() => true).catch(() => false);
-          
-          return {
-            ...os,
-            downloadUrl: `/files/os/${os.arquivo}`,
-            previewUrl: `/api/os/preview/${os.osId}`,
-            fileExists
-          };
+        const listaComUrls = lista.map(os => ({
+          ...os,
+          downloadUrl: `/files/os/${os.arquivo}`,
+          previewUrl: `/api/os/preview/${os.osId}`
         }));
 
         res.json({
@@ -377,28 +368,6 @@ class ServidorCentral {
       }
     });
 
-    this.app.get('/api/os/preview/:id', async (req, res) => {
-      try {
-        const osId = req.params.id;
-        const filePath = await this.geradorOS.buscarOS(osId);
-        
-        const fileBuffer = await fs.readFile(filePath);
-        const base64 = fileBuffer.toString('base64');
-        
-        res.json({
-          success: true,
-          osId,
-          pdfBase64: base64,
-          mimeType: 'application/pdf'
-        });
-      } catch (error) {
-        res.status(404).json({
-          success: false,
-          message: 'Arquivo não encontrado'
-        });
-      }
-    });
-
     this.app.delete('/api/os/deletar/:id', async (req, res) => {
       try {
         const osId = req.params.id;
@@ -413,6 +382,63 @@ class ServidorCentral {
         res.status(500).json({
           success: false,
           message: error.message
+        });
+      }
+    });
+
+    // ==================== ESTATÍSTICAS ====================
+    
+    this.app.get('/api/estatisticas', async (req, res) => {
+      try {
+        const totalAtendimentos = await this.planilhaService.contarAtendimentos();
+        const totalOS = await this.geradorOS.contarOS();
+        const totalPausados = await this.pausadosRepo.contarUsuariosPausados();
+        
+        res.json({
+          success: true,
+          estatisticas: {
+            totalAtendimentos,
+            totalOS,
+            totalPausados,
+            botStatus: this.bot ? 'online' : 'offline',
+            ultimaAtualizacao: new Date().toISOString()
+          }
+        });
+      } catch (error) {
+        logger.error('Erro ao buscar estatísticas:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message
+        });
+      }
+    });
+
+    // ==================== ROTAS DE DEBUG E SAÚDE ====================
+    
+    this.app.get('/api/debug/database', async (req, res) => {
+      try {
+        const isConnected = database.isReady();
+        
+        if (isConnected) {
+          const result = await database.query('SELECT NOW() as timestamp');
+          res.json({
+            success: true,
+            connected: true,
+            timestamp: result.rows[0].timestamp,
+            database: process.env.DB_NAME || 'artestofados'
+          });
+        } else {
+          res.json({
+            success: false,
+            connected: false,
+            message: 'Banco de dados não conectado'
+          });
+        }
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          connected: false,
+          error: error.message
         });
       }
     });
@@ -444,48 +470,29 @@ class ServidorCentral {
       }
     });
 
-    this.app.get('/api/estatisticas', async (req, res) => {
-      try {
-        const atendimentos = await this.planilhaService.getAtendimentos();
-        const ordens = await this.geradorOS.listarOS();
-        
-        res.json({
-          success: true,
-          estatisticas: {
-            totalAtendimentos: atendimentos.length,
-            totalOS: ordens.length,
-            botStatus: this.bot ? 'online' : 'offline',
-            ultimaAtualizacao: new Date().toISOString()
-          }
-        });
-      } catch (error) {
-        res.status(500).json({
-          success: false,
-          message: error.message
-        });
-      }
-    });
-
     this.app.get('/api/health', (req, res) => {
       res.json({
         success: true,
         status: 'online',
         timestamp: new Date().toISOString(),
-        version: '2.0.0'
+        version: '2.1.0',
+        database: database.isReady() ? 'connected' : 'disconnected'
       });
     });
 
     this.app.get('/', (req, res) => {
       res.json({
-        message: 'Servidor Central Artestofados com Z-API',
-        version: '2.0.0',
+        message: 'Servidor Central Artestofados com Z-API e PostgreSQL',
+        version: '2.1.0',
         status: 'online',
+        database: database.isReady() ? 'connected' : 'disconnected',
         endpoints: {
           bot: '/api/bot/*',
           os: '/api/os/*',
           atendimentos: '/api/atendimentos',
           estatisticas: '/api/estatisticas',
-          files: '/files/os/*'
+          files: '/files/os/*',
+          debug: '/api/debug/*'
         }
       });
     });
@@ -509,6 +516,9 @@ class ServidorCentral {
 
   async start() {
     try {
+      // Conectar ao banco de dados primeiro
+      await this.initializeDatabase();
+      
       await this.setupDirectories();
       this.setupMiddlewares();
       this.setupRoutes();
@@ -518,6 +528,7 @@ class ServidorCentral {
         logger.info(`🚀 SERVIDOR CENTRAL ARTESTOFADOS`);
         logger.info(`📡 Porta: ${this.port}`);
         logger.info(`🌐 Acessível em: http://0.0.0.0:${this.port}`);
+        logger.info(`🗄️  Banco: PostgreSQL (${process.env.DB_NAME || 'artestofados'})`);
         logger.info(`📁 Diretório OS: ${this.osDir}`);
         logger.info('═══════════════════════════════════════════');
         logger.info('⚡ Bot WhatsApp via Z-API');
@@ -541,6 +552,14 @@ class ServidorCentral {
       } catch (error) {
         logger.error('Erro ao desconectar bot:', error);
       }
+    }
+
+    // Fechar conexão com banco de dados
+    try {
+      await database.close();
+      logger.info('Conexão com banco de dados fechada');
+    } catch (error) {
+      logger.error('Erro ao fechar conexão com banco:', error);
     }
     
     logger.info('Servidor encerrado');

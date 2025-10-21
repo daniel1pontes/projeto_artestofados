@@ -1,0 +1,90 @@
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: artestofados_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: artestofados
+      POSTGRES_USER: artestofados
+      POSTGRES_PASSWORD: artestofados123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./servidor-central/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - artestofados_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artestofados -d artestofados"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Servidor Central (Backend)
+  servidor-central:
+    build:
+      context: ./servidor-central
+      dockerfile: Dockerfile
+    container_name: artestofados_servidor
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      
+      # Banco de dados (conecta ao container postgres)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: artestofados
+      DB_USER: artestofados
+      DB_PASSWORD: artestofados123
+      
+      # Z-API (suas credenciais)
+      ZAPI_INSTANCE_ID: ${ZAPI_INSTANCE_ID}
+      ZAPI_TOKEN: ${ZAPI_TOKEN}
+      ZAPI_CLIENT_TOKEN: ${ZAPI_CLIENT_TOKEN}
+      
+      # Info empresa
+      EMPRESA_NOME: Artestofados
+      EMPRESA_TELEFONE: (83) 3241-1234
+      EMPRESA_EMAIL: contato@artestofados.com.br
+      EMPRESA_CIDADE: João Pessoa/PB
+      
+      SERVER_URL: ${SERVER_URL:-http://localhost:4000}
+    volumes:
+      - ./servidor-central/data/ordens_servico:/app/data/ordens_servico
+      - logs_volume:/app/logs
+    ports:
+      - "4000:4000"
+    networks:
+      - artestofados_network
+
+  # Cliente Desktop (opcional, para desenvolvimento)
+  cliente-desktop:
+    build:
+      context: ./cliente-desktop
+      dockerfile: Dockerfile
+    container_name: artestofados_cliente
+    restart: unless-stopped
+    depends_on:
+      - servidor-central
+    environment:
+      SERVER_URL: http://servidor-central:4000
+    ports:
+      - "3000:3000"
+    networks:
+      - artestofados_network
+
+volumes:
+  postgres_data:
+    driver: local
+  logs_volume:
+    driver: local
+
+networks:
+  artestofados_network:
+    driver: bridge

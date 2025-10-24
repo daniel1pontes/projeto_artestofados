@@ -7,36 +7,31 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-   <div class="app-container">
+    <div class="app-container">
         <!-- SIDEBAR -->
         <aside class="sidebar">
             <div class="logo-container">
-                <div class="logo">
-                    <img src="build/logo_cortada.png" alt="Logo Artestofados">
-                </div>
+                <img src="build/logo_cortada.png" alt="Logo Artestofados" class="logo">
             </div>
 
             <nav class="sidebar-nav">
                 <button class="nav-button active" onclick="switchTab('chatbot')">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
                     <span>Chatbot</span>
                 </button>
 
                 <button class="nav-button" onclick="switchTab('gerador')">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
                     </svg>
                     <span>Gerador de OS</span>
                 </button>
 
                 <button class="nav-button" onclick="switchTab('banco')">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                     </svg>
                     <span>Banco de OS</span>
@@ -46,166 +41,192 @@
             <div class="sidebar-footer">
                 <div class="server-status">
                     <span class="status-dot" id="statusDot"></span>
-                    <div class="status-info">
-                        <span id="serverStatus" class="status-text">Conectado</span>
-                        <span id="serverUrl" class="status-url"></span>
-                    </div>
+                    <span id="serverStatus" class="status-text">Conectado</span>
                 </div>
+                <p id="serverUrl" class="server-url"></p>
             </div>
         </aside>
 
         <!-- MAIN CONTENT -->
         <main class="main-content">
-            <div class="header">
-                <h1>Sistema de Gerenciamento</h1>
-                <p>Atendimentos e Ordens de Serviço</p>
-            </div>
+            <!-- TAB 1: CHATBOT -->
+            <div id="chatbot" class="tab-content active">
+                <div class="page-header">
+                    <h1>🤖 Controle do Chatbot</h1>
+                    <p>Gerencie o bot do WhatsApp com IA integrada</p>
+                </div>
 
-            <div class="content">
-                <!-- TAB CHATBOT -->
-                <div id="chatbot" class="tab-content active">
-                    <!-- ALERT AREA -->
-                    <div id="chatbotAlert"></div>
+                <div id="chatbotAlert"></div>
 
-                    <!-- STATUS CARD -->
-                    <div class="status-card">
+                <!-- Status e Controles -->
+                <div class="card">
+                    <div class="card-header">
                         <h3>
                             <span class="status-indicator offline" id="botStatus"></span>
                             Status do Bot
                         </h3>
-                        <p id="botStatusText">Bot desconectado</p>
+                    </div>
+                    <div class="card-body">
+                        <p id="botStatusText" class="status-description">Bot desconectado</p>
                         
-                        <!-- BOTÃO DE CONECTAR -->
-                        <div class="button-group">
-                            <button id="connectWhatsAppBtn" class="btn btn-success" onclick="connectWhatsApp()">
+                        <!-- Botão Conectar -->
+                        <div id="connectBtnContainer" class="button-group">
+                            <button id="connectWhatsAppBtn" class="btn btn-success btn-lg" onclick="connectWhatsApp()">
                                 📱 Conectar ao WhatsApp
                             </button>
                         </div>
 
-                        <!-- BOTÕES DE CONTROLE -->
+                        <!-- Botões de Controle -->
                         <div id="botControlButtons" class="button-group" style="display: none;">
-                            <button class="btn btn-danger" onclick="disconnectBot()">
-                                🔌 Desconectar Bot
-                            </button>
                             <button class="btn btn-warning" onclick="restartBot()">
                                 🔄 Reiniciar Bot
                             </button>
                             <button class="btn btn-info" onclick="testAI()">
                                 🤖 Testar IA
                             </button>
-                        </div>
-                    </div>
-
-                    <!-- QR CODE CARD -->
-                    <div id="qrCodeCard" class="card" style="display: none;">
-                        <h3>📱 QR Code WhatsApp</h3>
-                        <div style="text-align: center;">
-                            <img id="qrCodeImage" src="" alt="QR Code" style="max-width: 300px; margin: 20px 0; display: none;">
-                            <p id="qrCodeStatus">Aguardando QR Code...</p>
-                        </div>
-                    </div>
-
-                    <!-- USUÁRIOS PAUSADOS -->
-                    <div class="card">
-                        <h3>⏸️ Usuários com Bot Pausado</h3>
-                        <p style="color: #6c757d; font-size: 0.9em; margin-bottom: 15px;">
-                            Quando você responde manualmente no WhatsApp, o bot pausa automaticamente por 2 horas para aquele cliente.
-                            Use o botão "Reativar" se quiser que o bot volte a responder antes desse tempo.
-                        </p>
-                        
-                        <div id="pausedUsersTable">
-                            <p style="text-align: center; padding: 20px; color: #6c757d;">
-                                Carregando...
-                            </p>
-                        </div>
-                        
-                        <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                            <button class="btn btn-secondary" onclick="loadPausedUsers()">
-                                🔄 Atualizar Lista
+                            <button class="btn btn-danger" onclick="disconnectBot()">
+                                🔌 Desconectar
                             </button>
-                            <button class="btn btn-primary" onclick="showPauseHelp()">
-                                ❓ Como Funciona
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- ATENDIMENTOS -->
-                    <div class="card">
-                        <h3>📊 Atendimentos Registrados</h3>
-                        <div id="atendimentosTable">
-                            <p>Lista de atendimentos aparecerá aqui...</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- TAB GERADOR DE OS -->
-                <div id="gerador" class="tab-content">
+                <!-- QR Code -->
+                <div id="qrCodeCard" class="card" style="display: none;">
+                    <div class="card-header">
+                        <h3>📱 Escaneie o QR Code</h3>
+                    </div>
+                    <div class="card-body text-center">
+                        <img id="qrCodeImage" src="" alt="QR Code" style="max-width: 300px; margin: 20px auto; display: none;">
+                        <p id="qrCodeStatus" class="qr-status">Aguardando QR Code...</p>
+                    </div>
+                </div>
+
+                <!-- Usuários Pausados -->
                 <div class="card">
-                    <h3>📄 Nova Ordem de Serviço</h3>
-                    
-                    <div id="osAlert"></div>
-                    
-                    <form id="osForm">
-                    <div class="form-group">
-                        <label>Nome do Cliente *</label>
-                        <input type="text" class="form-control" id="nomeCliente" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Prazo de Entrega *</label>
-                        <input type="date" class="form-control" id="prazoEntrega" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Forma de Pagamento *</label>
-                        <input type="text" class="form-control" id="formaPagamento"
-                            placeholder="Ex: PIX, Dinheiro, Cartão de Crédito..." required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Desconto (%)</label>
-                        <input type="number" class="form-control" id="desconto" min="0" max="100" value="0" step="0.01">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Imagens (opcional)</label>
-                        <input type="file" id="imagens" multiple accept="image/*" style="display: none;">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('imagens').click()">
-                            + Adicionar Imagens
+                    <div class="card-header">
+                        <h3>⏸️ Usuários com Bot Pausado</h3>
+                        <button class="btn btn-sm btn-secondary" onclick="loadPausedUsers()">
+                            🔄 Atualizar
                         </button>
-                        <div id="imagensPreview" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;"></div>
-                        <small>Você pode adicionar várias imagens. Elas serão acumuladas.</small>
                     </div>
-
-                    <h4 style="margin: 25px 0 15px 0;">Itens do Serviço</h4>
-                    <div id="itensContainer"></div>
-
-                    <button type="button" class="btn-add" onclick="addItem()">+ Adicionar Item</button>
-
-                    <div style="margin-top: 20px; text-align: right;">
-                        <label style="font-weight: bold;">Total Geral:</label>
-                        <span id="totalGeral" style="margin-left: 10px;">R$ 0,00</span>
-                    </div>
-
-                    <div style="margin-top: 30px;">
-                        <button type="submit" class="btn btn-primary">Gerar Ordem de Serviço</button>
-                    </div>
-
-                    </form>
-                </div>
-                </div>
-
-                <!-- TAB BANCO DE OS -->
-                <div id="banco" class="tab-content">
-                    <div class="card">
-                        <h3>🗂️ Banco de Ordens de Serviço</h3>
-                        
-                        <div class="search-box">
-                            <input type="text" class="form-control" id="searchOS" placeholder="Buscar por nome do cliente...">
+                    <div class="card-body">
+                        <p class="info-text">
+                            Quando você responde manualmente no WhatsApp, o bot pausa por 2 horas para aquele cliente.
+                        </p>
+                        <div id="pausedUsersTable" class="table-container">
+                            <p class="loading-text">Carregando...</p>
                         </div>
+                    </div>
+                </div>
 
-                        <div id="osListTable">
-                            <p>Lista de ordens de serviço aparecerá aqui...</p>
+                <!-- Atendimentos -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📊 Atendimentos Registrados</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="atendimentosTable" class="table-container">
+                            <p class="loading-text">Carregando atendimentos...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: GERADOR DE OS -->
+            <div id="gerador" class="tab-content">
+                <div class="page-header">
+                    <h1>📄 Gerador de Ordem de Serviço</h1>
+                    <p>Crie e gere PDFs de ordens de serviço</p>
+                </div>
+
+                <div id="osAlert"></div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Nova Ordem de Serviço</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="osForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Nome do Cliente *</label>
+                                    <input type="text" class="form-control" id="nomeCliente" required 
+                                           placeholder="Digite o nome do cliente">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Prazo de Entrega *</label>
+                                    <input type="date" class="form-control" id="prazoEntrega" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Forma de Pagamento *</label>
+                                    <input type="text" class="form-control" id="formaPagamento" required
+                                           placeholder="Ex: PIX, Dinheiro, Cartão...">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Desconto (%)</label>
+                                    <input type="number" class="form-control" id="desconto" 
+                                           min="0" max="100" value="0" step="0.01">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Imagens (opcional)</label>
+                                <input type="file" id="imagens" multiple accept="image/*" style="display: none;">
+                                <button type="button" class="btn btn-secondary" onclick="document.getElementById('imagens').click()">
+                                    📷 Adicionar Imagens
+                                </button>
+                                <div id="imagensPreview" class="images-preview"></div>
+                            </div>
+
+                            <div class="items-section">
+                                <div class="section-header">
+                                    <h4>Itens do Serviço</h4>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="addItem()">
+                                        + Adicionar Item
+                                    </button>
+                                </div>
+                                <div id="itensContainer"></div>
+                            </div>
+
+                            <div class="total-section">
+                                <label>Total Geral:</label>
+                                <span id="totalGeral" class="total-value">R$ 0,00</span>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    📄 Gerar Ordem de Serviço
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: BANCO DE OS -->
+            <div id="banco" class="tab-content">
+                <div class="page-header">
+                    <h1>🗂️ Banco de Ordens de Serviço</h1>
+                    <p>Visualize e baixe as ordens de serviço geradas</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Ordens de Serviço</h3>
+                        <div class="search-box">
+                            <input type="text" class="form-control" id="searchOS" 
+                                   placeholder="🔍 Buscar por nome do cliente...">
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="osListTable" class="table-container">
+                            <p class="loading-text">Carregando ordens de serviço...</p>
                         </div>
                     </div>
                 </div>

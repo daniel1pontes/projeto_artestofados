@@ -1,54 +1,117 @@
-FROM node:18-alpine
+# Imagem base
+FROM node:18-alpine AS base
 
-# Instalar dependências do sistema para PDFkit e Puppeteer
+# Metadados
+LABEL maintainer="Artestofados <contato@artestofados.com.br>"
+LABEL description="Servidor Central com WhatsApp Bot e IA"
+LABEL version="2.2.0"
+
+# Variáveis de ambiente globais
+ENV NODE_ENV=production \
+    NPM_CONFIG_LOGLEVEL=warn \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# ==============================================================================
+# STAGE 1: Dependencies
+# ==============================================================================
+FROM base AS dependencies
+
+WORKDIR /app
+
+# Instalar dependências do sistema
 RUN apk add --no-cache \
+    # Build tools
+    python3 \
+    make \
+    g++ \
+    # PDF generation
     cairo-dev \
     pango-dev \
     jpeg-dev \
     giflib-dev \
     librsvg-dev \
-    python3 \
-    make \
-    g++ \
+    # WhatsApp Web (Puppeteer)
     chromium \
     nss \
     freetype \
     freetype-dev \
     harfbuzz \
     ca-certificates \
-    ttf-freefont
+    ttf-freefont \
+    # Utilities
+    curl \
+    && rm -rf /var/cache/apk/*
 
-# Configurar Puppeteer para usar Chromium do sistema
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-
-# Criar diretório da aplicação
-WORKDIR /app
-
-# Copiar package.json e package-lock.json
+# Copiar apenas arquivos de dependências primeiro (cache layer)
 COPY package*.json ./
 
-# Instalar dependências
-RUN npm ci --only=production
+# Instalar dependências de produção
+RUN npm ci --only=production --no-audit --no-fund \
+    && npm cache clean --force
+
+# ==============================================================================
+# STAGE 2: Production
+# ==============================================================================
+FROM base AS production
+
+WORKDIR /app
+
+# Instalar apenas dependências runtime necessárias
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    cairo \
+    pango \
+    jpeg \
+    giflib \
+    librsvg \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Copiar node_modules do stage anterior
+COPY --from=dependencies /app/node_modules ./node_modules
 
 # Copiar código fonte
-COPY . .
+COPY --chown=node:node . .
 
-# Criar diretórios necessários
-RUN mkdir -p data/ordens_servico logs whatsapp_session
+# Criar estrutura de diretórios necessários
+RUN mkdir -p \
+    data/ordens_servico \
+    logs \
+    whatsapp_session \
+    database \
+    && chown -R node:node /app
 
-# Definir permissões
-RUN chown -R node:node /app
+# Remover arquivos desnecessários
+RUN rm -rf \
+    .git \
+    .gitignore \
+    .dockerignore \
+    README.md \
+    *.md \
+    tests \
+    .vscode \
+    .idea
 
-# Usar usuário não-root
-USER node
-
-# Expor porta
+# Expor porta da aplicação
 EXPOSE 4000
 
-# Comando de saúde
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:4000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+# Health check robusto
+HEALTHCHECK --interval=30s \
+            --timeout=10s \
+            --start-period=60s \
+            --retries=3 \
+  CMD curl -f http://localhost:4000/api/health || exit 1
 
-# Comando para iniciar
-CMD ["npm", "start"]
+# Usar usuário não-root por segurança
+USER node
+
+# Comando para iniciar a aplicação
+CMD ["node", "index.js"]
+
+# ==============================================================================

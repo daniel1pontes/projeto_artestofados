@@ -1,15 +1,21 @@
 {
   "name": "artestofados-cliente",
-  "version": "1.0.0",
-  "description": "Cliente Desktop Artestofados",
+  "version": "2.2.0",
+  "description": "Cliente Desktop Artestofados com WhatsApp-Web.js e IA",
   "main": "main.js",
+  "author": "Artestofados",
+  "license": "MIT",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "build": "electron-builder",
     "build-win": "electron-builder --win --x64",
     "build-linux": "electron-builder --linux",
-    "build-mac": "electron-builder --mac"
+    "build-mac": "electron-builder --mac",
+    "build-all": "electron-builder --win --linux --mac",
+    "dist": "npm run build",
+    "pack": "electron-builder --dir",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "dotenv": "^16.3.1"
@@ -20,28 +26,168 @@
   },
   "build": {
     "appId": "com.artestofados.cliente",
-    "productName": "Artestofados",
+    "productName": "Artestofados IA",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "main.js",
       "renderer.js",
       "index.html",
       "styles.css",
-      ".env.example"
+      ".env.example",
+      "build/**/*",
+      "!build/icon.ico",
+      "!build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "build/",
+        "to": "build/",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "build/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "publisherName": "Artestofados",
+      "verifyUpdateCodeSignature": false
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "build/icon.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Office"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.business"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Artestofados IA",
+      "displayLanguageSelector": false,
+      "installerLanguages": ["pt_BR", "en_US"],
+      "language": "2070",
+      "multiLanguageInstaller": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "uninstallDisplayName": "${productName}",
+      "menuCategory": true
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}.${ext}",
+      "synopsis": "Sistema de gestão com IA para estofados",
+      "description": "Sistema completo de gestão de atendimentos e ordens de serviço com inteligência artificial integrada."
+    },
+    "deb": {
+      "artifactName": "${productName}-${version}.${ext}",
+      "synopsis": "Sistema de gestão com IA",
+      "description": "Sistema completo de gestão de atendimentos e ordens de serviço com WhatsApp e ChatGPT integrados.",
+      "category": "Office",
+      "priority": "optional",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libdrm2",
+        "libxcomposite1",
+        "libxdamage1",
+        "libxrandr2",
+        "libgbm1",
+        "libxkbcommon0",
+        "libgtk-3-0"
+      ]
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}.${ext}",
+      "background": "build/dmg-background.png",
+      "iconSize": 100,
+      "contents": [
+        {
+          "x": 380,
+          "y": 280,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 110,
+          "y": 280,
+          "type": "file"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "protocols": [
+      {
+        "name": "artestofados",
+        "schemes": ["artestofados"]
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "arteos",
+        "name": "Artestofados OS File",
+        "description": "Arquivo de Ordem de Serviço Artestofados",
+        "icon": "build/file-icon.ico"
+      }
+    ]
+  },
+  "keywords": [
+    "artestofados",
+    "gestão",
+    "whatsapp",
+    "chatgpt",
+    "ia",
+    "atendimento",
+    "ordem-servico",
+    "estofados",
+    "moveis"
+  ],
+  "homepage": "https://github.com/artestofados/sistema-gestao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/artestofados/sistema-gestao.git"
+  },
+  "bugs": {
+    "url": "https://github.com/artestofados/sistema-gestao/issues"
   }
 }

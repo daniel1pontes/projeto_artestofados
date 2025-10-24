@@ -1,4 +1,4 @@
-// cliente-desktop/renderer.js - VERSÃO COM DESCONTO GERAL CORRIGIDO
+// cliente-desktop/renderer.js - VERSÃO CORRIGIDA MANTENDO VISUAL ORIGINAL
 const { ipcRenderer, shell } = require('electron');
 
 let SERVER_URL = 'http://localhost:4000';
@@ -86,7 +86,19 @@ async function checkBotStatus() {
         
         if (data.status === 'online' && data.connected) {
             indicator.className = 'status-indicator online';
-            text.textContent = '✅ Bot conectado e operando';
+            
+            // Mostrar info da IA de forma sutil
+            let aiInfo = '';
+            if (data.ai && data.ai.initialized) {
+                aiInfo = ` | IA: Ativa`;
+                if (data.sessions) {
+                    aiInfo += ` (${data.sessions} sessões)`;
+                }
+            } else if (data.ai && !data.ai.initialized) {
+                aiInfo = ` | IA: Configure OPENAI_API_KEY`;
+            }
+            
+            text.innerHTML = `✅ Bot conectado e operando${aiInfo}`;
             text.style.color = '#28a745';
             
             connectBtn.style.display = 'none';
@@ -96,7 +108,7 @@ async function checkBotStatus() {
             stopQRCodePolling();
             loadPausedUsers();
             
-        } else if (data.status === 'online') {
+        } else if (data.whatsapp && data.whatsapp.hasQRCode) {
             indicator.className = 'status-indicator offline';
             text.textContent = '⏳ Aguardando leitura do QR Code...';
             text.style.color = '#ffc107';
@@ -110,7 +122,11 @@ async function checkBotStatus() {
             
         } else {
             indicator.className = 'status-indicator offline';
-            text.textContent = '⚠️ Bot desconectado';
+            let statusMsg = '⚠️ Bot desconectado';
+            if (data.ai && !data.ai.initialized) {
+                statusMsg += ' | Configure OPENAI_API_KEY no .env';
+            }
+            text.textContent = statusMsg;
             text.style.color = '#dc3545';
             
             connectBtn.style.display = 'block';
@@ -135,7 +151,7 @@ async function checkBotStatus() {
 
 async function connectWhatsApp() {
     try {
-        showAlert('chatbotAlert', 'Iniciando conexão com WhatsApp via Z-API...', 'success');
+        showAlert('chatbotAlert', 'Iniciando conexão com WhatsApp...', 'success');
         
         const response = await fetch(`${SERVER_URL}/api/bot/start`, { method: 'POST' });
         const data = await response.json();
@@ -196,6 +212,50 @@ async function disconnectBot() {
         }
     } catch (error) {
         showAlert('chatbotAlert', '❌ Erro ao desconectar: ' + error.message, 'danger');
+    }
+}
+
+async function restartBot() {
+    try {
+        showAlert('chatbotAlert', 'Reiniciando bot...', 'warning');
+        
+        const response = await fetch(`${SERVER_URL}/api/bot/restart`, { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('chatbotAlert', '🔄 ' + data.message, 'success');
+            checkBotStatus();
+        } else {
+            showAlert('chatbotAlert', '⚠️ ' + data.message, 'danger');
+        }
+    } catch (error) {
+        showAlert('chatbotAlert', '❌ Erro ao reiniciar: ' + error.message, 'danger');
+    }
+}
+
+async function testAI() {
+    try {
+        const message = prompt('Digite uma mensagem para testar a IA:');
+        if (!message) return;
+        
+        showAlert('chatbotAlert', 'Testando IA...', 'info');
+        
+        const response = await fetch(`${SERVER_URL}/api/ai/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            const result = `📤 Entrada: ${data.input}\n\n🤖 IA Respondeu: ${data.response}`;
+            alert(result);
+            showAlert('chatbotAlert', '✅ Teste da IA concluído!', 'success');
+        } else {
+            showAlert('chatbotAlert', '❌ ' + data.message, 'danger');
+        }
+    } catch (error) {
+        showAlert('chatbotAlert', '❌ Erro ao testar IA: ' + error.message, 'danger');
     }
 }
 
@@ -294,7 +354,7 @@ function startQRCodePolling() {
     const qrCodeCard = document.getElementById('qrCodeCard');
     qrCodeCard.style.display = 'block';
     
-    document.getElementById('qrCodeStatus').textContent = '⏳ Conectando ao Z-API...';
+    document.getElementById('qrCodeStatus').textContent = '⏳ Conectando ao WhatsApp...';
     document.getElementById('qrCodeStatus').style.color = '#ffc107';
     
     checkQRCode();
@@ -332,7 +392,7 @@ async function loadPausedUsers() {
         if (data.success && data.pausedUsers && data.pausedUsers.length > 0) {
             let html = `
                 <div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">
-                    <strong>ℹ️ Informação:</strong> Estes usuários têm o bot pausado porque você respondeu manualmente no WhatsApp.
+                    <strong>ℹ️ Informação:</strong> Estes usuários têm o bot pausado para permitir atendimento manual.
                 </div>
                 <table class="table" style="margin-top: 15px;">
                     <thead>
@@ -347,7 +407,7 @@ async function loadPausedUsers() {
                     <tbody>`;
             
             data.pausedUsers.forEach(user => {
-                const pausedAt = new Date(user.pausedAt).toLocaleString('pt-BR', {
+                const pausedAt = new Date(user.pausadoEm).toLocaleString('pt-BR', {
                     day: '2-digit',
                     month: '2-digit',
                     hour: '2-digit',
@@ -379,7 +439,7 @@ async function loadPausedUsers() {
                             <button class="btn btn-primary" 
                                     onclick="reativarUsuario('${user.userId}', '${user.userName}')"
                                     style="font-size: 0.85em; padding: 6px 12px;">
-                                ▶️ Reativar Agora
+                                ▶️ Reativar Bot
                             </button>
                         </td>
                     </tr>`;
@@ -434,55 +494,51 @@ async function reativarUsuario(userId, userName) {
 function showPauseHelp() {
     const helpMessage = `
 ╔═══════════════════════════════════════════╗
-║  SISTEMA DE PAUSA AUTOMÁTICA              ║
+║  SISTEMA DE BOT COM IA INTEGRADA          ║
 ╚═══════════════════════════════════════════╝
 
 🔹 COMO FUNCIONA:
 
 1️⃣ Cliente envia mensagem
-   → Bot responde automaticamente
+   → IA (ChatGPT) responde automaticamente
 
-2️⃣ VOCÊ responde manualmente no WhatsApp
-   → Bot PAUSA automaticamente por 2 horas
-   → Cliente aparece na lista acima
-
-3️⃣ Durante as 2 horas:
-   → Bot NÃO responde esse cliente
-   → Você pode conversar normalmente
+2️⃣ VOCÊ pode pausar o bot para clientes específicos
+   → Via interface web
+   → Bot para de responder esse cliente
    → Outros clientes continuam sendo atendidos
 
-4️⃣ Após 2 horas:
-   → Bot volta a funcionar automaticamente
-   → Cliente sai da lista
+3️⃣ Durante a pausa:
+   → Você conversa manualmente via WhatsApp
+   → Bot não interfere na conversa
+   → Outros clientes continuam com IA
+
+4️⃣ Reativar bot:
+   → Clique em "▶️ Reativar Bot" na lista
+   → IA volta a funcionar para esse cliente
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔹 REATIVAR ANTES DAS 2 HORAS:
+🔹 COMANDOS ESPECIAIS (Cliente pode usar):
 
-• Clique em "▶️ Reativar Agora" na lista
-• Bot volta a responder imediatamente
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔹 CLIENTE PODE REATIVAR:
-
-O cliente pode enviar: #ativar
-→ Bot volta a responder mesmo pausado
+• #ativar - Reativa IA se pausada
+• #status - Mostra status do sistema
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✅ VANTAGENS:
 
-• Não precisa pausar o bot inteiro
-• Outros clientes continuam sendo atendidos
-• Você conversa livremente sem interferência
-• Controle total sobre cada cliente
+• IA responde 24/7 com inteligência
+• Pausa específica por cliente  
+• Outros clientes continuam atendidos
+• Conversas naturais e contextuais
+• Análise automática de intenções
+• Registros completos de atendimentos
     `;
     
     alert(helpMessage);
 }
 
-// ==================== FUNÇÕES DO GERADOR DE OS ====================
+// ==================== RESTO DO CÓDIGO ORIGINAL (OS, etc.) ====================
 
 function addItem() {
     const container = document.getElementById('itensContainer');
@@ -534,11 +590,8 @@ function attachItemCalculation() {
             const descontoItem = parseFloat(row.querySelector('[name="desconto"]').value) || 0;
             const totalInput = row.querySelector('[name="total"]');
 
-            // aplica desconto do item
             let subtotal = qtd * valor;
             let valorComDescontoItem = subtotal - (subtotal * descontoItem / 100);
-
-            // aplica desconto geral (nota)
             let valorFinal = valorComDescontoItem - (valorComDescontoItem * descontoGeral / 100);
 
             totalInput.value = formatMoney(valorFinal);
@@ -566,7 +619,6 @@ function attachItemCalculation() {
     atualizarTotais();
 }
 
-
 function toBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -575,8 +627,6 @@ function toBase64(file) {
         reader.onerror = reject;
     });
 }
-
-// ==================== FUNÇÕES DO BANCO DE OS ====================
 
 async function loadOSList() {
     try {
@@ -650,8 +700,6 @@ async function baixarOS(osId) {
     }
 }
 
-// ==================== FUNÇÕES UTILITÁRIAS ====================
-
 function showAlert(elementId, message, type) {
     const alertDiv = document.getElementById(elementId);
     if (alertDiv) {
@@ -677,12 +725,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const prazoInput = document.getElementById('prazoEntrega');
         if (prazoInput) {
             prazoInput.addEventListener('input', () => {
-                const valor = prazoInput.value; // formato ISO: yyyy-mm-dd
+                const valor = prazoInput.value;
                 if (valor) {
                     const ano = valor.split('-')[0];
                     if (ano.length > 4) {
                         alert('⚠️ O ano deve ter apenas 4 dígitos.');
-                        prazoInput.value = ''; // limpa o campo
+                        prazoInput.value = '';
                     }
                 }
             });
@@ -847,9 +895,12 @@ window.addEventListener('unhandledrejection', (e) => {
     console.error('Promise rejeitada:', e.reason);
 });
 
+// Exportar funções globais
 window.switchTab = switchTab;
 window.connectWhatsApp = connectWhatsApp;
 window.disconnectBot = disconnectBot;
+window.restartBot = restartBot;
+window.testAI = testAI;
 window.addItem = addItem;
 window.removeItem = removeItem;
 window.visualizarOS = visualizarOS;

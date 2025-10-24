@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs').promises;
-const WhatsAppBot = require('./chatbot/whatsappBot');
+const WhatsAppClient = require('./chatbot/whatsappClient');
+const AIHandler = require('./chatbot/aiHandler');
 const GeradorOS = require('./gerador_os/geradorOS');
 const PlanilhaService = require('./excel/planilha');
 const PausadosRepository = require('./database/repositories/pausadosRepository');
@@ -14,13 +15,15 @@ class ServidorCentral {
   constructor() {
     this.app = express();
     this.port = process.env.PORT || 4000;
-    this.bot = null;
+    this.whatsappClient = null;
+    this.aiHandler = new AIHandler();
     this.geradorOS = new GeradorOS();
     this.planilhaService = new PlanilhaService();
     this.pausadosRepo = new PausadosRepository();
     this.qrCodeData = null;
     this.dataDir = path.join(__dirname, 'data');
     this.osDir = path.join(this.dataDir, 'ordens_servico');
+    this.botStatus = 'offline';
   }
 
   async initializeDatabase() {
@@ -44,6 +47,32 @@ class ServidorCentral {
     } catch (error) {
       logger.error('Erro ao criar diretórios:', error);
     }
+  }
+
+  initializeWhatsApp() {
+    const onQRCodeUpdate = (qrCode) => {
+      this.qrCodeData = qrCode;
+      if (qrCode) {
+        logger.info('📱 QR Code gerado e disponível');
+      } else {
+        logger.info('✅ WhatsApp conectado - QR Code removido');
+      }
+    };
+
+    const onReady = () => {
+      this.botStatus = 'online';
+      logger.info('🚀 Bot WhatsApp pronto para receber mensagens!');
+    };
+
+    const onMessage = async (messageData) => {
+      try {
+        await this.aiHandler.handleMessage(messageData, this.whatsappClient);
+      } catch (error) {
+        logger.error('Erro ao processar mensagem:', error);
+      }
+    };
+
+    this.whatsappClient = new WhatsAppClient(onQRCodeUpdate, onReady, onMessage);
   }
 
   setupMiddlewares() {
@@ -70,13 +99,19 @@ class ServidorCentral {
   }
 
   setupRoutes() {
-    // ==================== BOT WHATSAPP (Z-API) ====================
+    // ==================== BOT WHATSAPP ====================
     
     this.app.get('/api/bot/status', (req, res) => {
+      const whatsappStatus = this.whatsappClient ? this.whatsappClient.getStatus() : { ready: false };
+      const aiStatus = this.aiHandler.getAIStatus();
+      
       res.json({
         success: true,
-        status: this.bot ? 'online' : 'offline',
-        connected: this.bot ? this.bot.isReady : false,
+        status: whatsappStatus.ready ? 'online' : 'offline',
+        connected: whatsappStatus.ready,
+        whatsapp: whatsappStatus,
+        ai: aiStatus,
+        sessions: this.aiHandler.getSessionCount(),
         timestamp: new Date().toISOString()
       });
     });
@@ -91,7 +126,7 @@ class ServidorCentral {
       } else {
         res.json({
           success: false,
-          message: 'QR Code não disponível. Inicie o bot primeiro.',
+          message: 'QR Code não disponível.',
           qrCode: null
         });
       }
@@ -99,37 +134,35 @@ class ServidorCentral {
 
     this.app.post('/api/bot/start', async (req, res) => {
       try {
-        if (this.bot) {
-          logger.info('Bot já existe, limpando sessão antiga...');
-          await this.bot.clearSession();
-          this.bot = null;
-          this.qrCodeData = null;
+        // Verificar se OpenAI está configurada
+        if (!process.env.OPENAI_API_KEY) {
+          return res.status(400).json({
+            success: false,
+            message: 'Chave da OpenAI não configurada. Adicione OPENAI_API_KEY no arquivo .env'
+          });
         }
 
-        const onQRCodeUpdate = (qrCode) => {
-          this.qrCodeData = qrCode;
-          if (qrCode) {
-            logger.info('QR Code atualizado');
-          } else {
-            logger.info('QR Code removido - Bot conectado');
-          }
-        };
+        if (this.whatsappClient) {
+          logger.info('Reiniciando WhatsApp...');
+          await this.whatsappClient.destroy();
+          this.whatsappClient = null;
+          this.qrCodeData = null;
+          this.botStatus = 'offline';
+        }
 
-        this.bot = new WhatsAppBot(onQRCodeUpdate);
-        await this.bot.initialize();
+        this.initializeWhatsApp();
+        await this.whatsappClient.initialize();
         
-        const webhookUrl = `${process.env.SERVER_URL || 'http://177.35.39.181:4000'}/api/bot/webhook`;
-        await this.bot.setupWebhook(webhookUrl);
-        
-        logger.info('Bot iniciado via API - Nova sessão criada');
+        logger.info('🚀 Bot iniciado com IA integrada');
         res.json({ 
           success: true, 
-          message: 'Bot iniciado com sucesso. Aguarde o QR Code aparecer na interface.' 
+          message: 'Bot iniciado com sucesso! Aguarde o QR Code ou a conexão automática.' 
         });
       } catch (error) {
         logger.error('Erro ao iniciar bot:', error);
         this.qrCodeData = null;
-        this.bot = null;
+        this.whatsappClient = null;
+        this.botStatus = 'offline';
         res.status(500).json({ 
           success: false, 
           message: error.message 
@@ -139,16 +172,17 @@ class ServidorCentral {
 
     this.app.post('/api/bot/stop', async (req, res) => {
       try {
-        if (this.bot) {
-          logger.info('Parando bot e limpando sessão...');
-          await this.bot.clearSession();
-          this.bot = null;
+        if (this.whatsappClient) {
+          logger.info('🛑 Parando bot...');
+          await this.whatsappClient.destroy();
+          this.whatsappClient = null;
           this.qrCodeData = null;
+          this.botStatus = 'offline';
           
-          logger.info('Bot desconectado e sessão limpa via API');
+          logger.info('✅ Bot parado com sucesso');
           res.json({ 
             success: true, 
-            message: 'Bot desconectado e sessão limpa com sucesso' 
+            message: 'Bot parado com sucesso' 
           });
         } else {
           res.json({ 
@@ -165,35 +199,26 @@ class ServidorCentral {
       }
     });
 
-    // ==================== WEBHOOK Z-API ====================
-    
-    this.app.post('/api/bot/webhook', async (req, res) => {
+    this.app.post('/api/bot/restart', async (req, res) => {
       try {
-        logger.info('📥 Webhook recebido da Z-API');
-        
-        if (!this.bot) {
-          logger.warn('⚠️ Bot não está ativo, ignorando webhook');
-          return res.status(200).json({ 
+        if (this.whatsappClient) {
+          await this.whatsappClient.restart();
+          res.json({ 
+            success: true, 
+            message: 'Bot reiniciado com sucesso' 
+          });
+        } else {
+          res.status(400).json({ 
             success: false, 
-            message: 'Bot não está ativo' 
+            message: 'Bot não está em execução' 
           });
         }
-
-        if (!req.body.phone || !req.body.text?.message) {
-          logger.warn('⚠️ Webhook inválido - dados incompletos');
-          return res.status(200).json({ 
-            success: false, 
-            message: 'Dados de webhook inválidos' 
-          });
-        }
-
-        await this.bot.handleWebhookMessage(req.body);
-        logger.info('✅ Webhook processado com sucesso');
-        
-        res.status(200).json({ success: true });
       } catch (error) {
-        logger.error('❌ Erro ao processar webhook:', error);
-        res.status(200).json({ success: false });
+        logger.error('Erro ao reiniciar bot:', error);
+        res.status(500).json({ 
+          success: false, 
+          message: error.message 
+        });
       }
     });
 
@@ -201,7 +226,7 @@ class ServidorCentral {
     
     this.app.get('/api/bot/paused-users', async (req, res) => {
       try {
-        const pausedUsers = await this.pausadosRepo.listarUsuariosPausados();
+        const pausedUsers = await this.aiHandler.getPausedUsers();
         
         res.json({
           success: true,
@@ -220,7 +245,7 @@ class ServidorCentral {
     this.app.post('/api/bot/resume-user/:userId', async (req, res) => {
       try {
         const userId = req.params.userId;
-        const resumed = await this.pausadosRepo.reativarUsuario(userId);
+        const resumed = await this.aiHandler.resumeUserBot(userId);
         
         if (resumed) {
           logger.info(`Bot reativado manualmente para usuário: ${userId}`);
@@ -239,6 +264,67 @@ class ServidorCentral {
         res.status(500).json({ 
           success: false, 
           message: error.message 
+        });
+      }
+    });
+
+    this.app.post('/api/bot/pause-user/:userId', async (req, res) => {
+      try {
+        const userId = req.params.userId;
+        const { userName, hours } = req.body;
+        
+        await this.aiHandler.pauseUserBot(userId, userName || 'Cliente', hours || 2);
+        
+        res.json({ 
+          success: true, 
+          message: `Usuário pausado por ${hours || 2} horas` 
+        });
+      } catch (error) {
+        logger.error('Erro ao pausar usuário:', error);
+        res.status(500).json({ 
+          success: false, 
+          message: error.message 
+        });
+      }
+    });
+
+    // ==================== CONFIGURAÇÃO DA IA ====================
+    
+    this.app.get('/api/ai/status', (req, res) => {
+      const status = this.aiHandler.getAIStatus();
+      res.json({
+        success: true,
+        ai: status,
+        sessions: this.aiHandler.getSessionCount()
+      });
+    });
+
+    this.app.post('/api/ai/test', async (req, res) => {
+      try {
+        const { message } = req.body;
+        
+        if (!message) {
+          return res.status(400).json({
+            success: false,
+            message: 'Mensagem é obrigatória'
+          });
+        }
+
+        const response = await this.aiHandler.aiConfig.generateResponse(message, {
+          clienteName: 'Teste',
+          userIntent: 'teste'
+        });
+
+        res.json({
+          success: true,
+          input: message,
+          response: response
+        });
+      } catch (error) {
+        logger.error('Erro ao testar IA:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message
         });
       }
     });
@@ -393,6 +479,7 @@ class ServidorCentral {
         const totalAtendimentos = await this.planilhaService.contarAtendimentos();
         const totalOS = await this.geradorOS.contarOS();
         const totalPausados = await this.pausadosRepo.contarUsuariosPausados();
+        const aiStatus = this.aiHandler.getAIStatus();
         
         res.json({
           success: true,
@@ -400,7 +487,9 @@ class ServidorCentral {
             totalAtendimentos,
             totalOS,
             totalPausados,
-            botStatus: this.bot ? 'online' : 'offline',
+            sessionsAtivas: this.aiHandler.getSessionCount(),
+            botStatus: this.botStatus,
+            aiStatus: aiStatus.initialized ? 'online' : 'offline',
             ultimaAtualizacao: new Date().toISOString()
           }
         });
@@ -443,51 +532,46 @@ class ServidorCentral {
       }
     });
 
-    this.app.get('/api/debug/files', async (req, res) => {
-      try {
-        const files = await fs.readdir(this.osDir);
-        const fileDetails = await Promise.all(files.map(async file => {
-          const filePath = path.join(this.osDir, file);
-          const stats = await fs.stat(filePath);
-          return {
-            name: file,
-            size: stats.size,
-            created: stats.birthtime,
-            modified: stats.mtime
-          };
-        }));
-        
-        res.json({
-          success: true,
-          directory: this.osDir,
-          files: fileDetails
-        });
-      } catch (error) {
-        res.status(500).json({
-          success: false,
-          message: error.message
-        });
-      }
+    this.app.get('/api/debug/ai', (req, res) => {
+      const aiStatus = this.aiHandler.getAIStatus();
+      res.json({
+        success: true,
+        ai: aiStatus,
+        openaiKey: process.env.OPENAI_API_KEY ? 'Configurada' : 'NÃO CONFIGURADA',
+        sessions: this.aiHandler.getSessionCount()
+      });
     });
 
     this.app.get('/api/health', (req, res) => {
+      const whatsappStatus = this.whatsappClient ? this.whatsappClient.getStatus() : { ready: false };
+      const aiStatus = this.aiHandler.getAIStatus();
+      
       res.json({
         success: true,
         status: 'online',
         timestamp: new Date().toISOString(),
-        version: '2.1.0',
-        database: database.isReady() ? 'connected' : 'disconnected'
+        version: '2.2.0',
+        services: {
+          database: database.isReady() ? 'connected' : 'disconnected',
+          whatsapp: whatsappStatus.ready ? 'connected' : 'disconnected',
+          ai: aiStatus.initialized ? 'active' : 'inactive'
+        }
       });
     });
 
     this.app.get('/', (req, res) => {
       res.json({
-        message: 'Servidor Central Artestofados com Z-API e PostgreSQL',
-        version: '2.1.0',
+        message: 'Servidor Central Artestofados com WhatsApp-Web.js e ChatGPT',
+        version: '2.2.0',
         status: 'online',
-        database: database.isReady() ? 'connected' : 'disconnected',
+        services: {
+          database: database.isReady() ? 'connected' : 'disconnected',
+          whatsapp: this.whatsappClient ? (this.whatsappClient.getStatus().ready ? 'connected' : 'disconnected') : 'not-initialized',
+          ai: this.aiHandler.getAIStatus().initialized ? 'active' : 'inactive'
+        },
         endpoints: {
           bot: '/api/bot/*',
+          ai: '/api/ai/*',
           os: '/api/os/*',
           atendimentos: '/api/atendimentos',
           estatisticas: '/api/estatisticas',
@@ -516,6 +600,12 @@ class ServidorCentral {
 
   async start() {
     try {
+      // Verificar configurações obrigatórias
+      if (!process.env.OPENAI_API_KEY) {
+        logger.warn('⚠️  OPENAI_API_KEY não configurada. Configure no arquivo .env');
+        logger.warn('   Exemplo: OPENAI_API_KEY=sk-sua-chave-aqui');
+      }
+
       // Conectar ao banco de dados primeiro
       await this.initializeDatabase();
       
@@ -523,16 +613,22 @@ class ServidorCentral {
       this.setupMiddlewares();
       this.setupRoutes();
 
+      // Inicializar limpezas automáticas
+      this.aiHandler.startSessionCleanup();
+      this.aiHandler.startPausedUsersCleanup();
+
       this.app.listen(this.port, '0.0.0.0', () => {
         logger.info('═══════════════════════════════════════════');
-        logger.info(`🚀 SERVIDOR CENTRAL ARTESTOFADOS`);
+        logger.info(`🚀 SERVIDOR CENTRAL ARTESTOFADOS v2.2.0`);
         logger.info(`📡 Porta: ${this.port}`);
         logger.info(`🌐 Acessível em: http://0.0.0.0:${this.port}`);
         logger.info(`🗄️  Banco: PostgreSQL (${process.env.DB_NAME || 'artestofados'})`);
+        logger.info(`🤖 IA: ${process.env.OPENAI_API_KEY ? 'ChatGPT Configurado' : 'NÃO CONFIGURADO'}`);
         logger.info(`📁 Diretório OS: ${this.osDir}`);
         logger.info('═══════════════════════════════════════════');
-        logger.info('⚡ Bot WhatsApp via Z-API');
+        logger.info('📱 WhatsApp-Web.js com IA Integrada');
         logger.info('💡 Use o botão "Conectar ao WhatsApp" na interface');
+        logger.info('⚙️  Configure OPENAI_API_KEY no .env para ativar IA');
         logger.info('═══════════════════════════════════════════');
       });
 
@@ -545,12 +641,12 @@ class ServidorCentral {
   async shutdown() {
     logger.info('Iniciando shutdown do servidor...');
     
-    if (this.bot) {
+    if (this.whatsappClient) {
       try {
-        await this.bot.clearSession();
-        logger.info('Bot WhatsApp desconectado e sessão limpa');
+        await this.whatsappClient.destroy();
+        logger.info('WhatsApp desconectado');
       } catch (error) {
-        logger.error('Erro ao desconectar bot:', error);
+        logger.error('Erro ao desconectar WhatsApp:', error);
       }
     }
 

@@ -43,10 +43,11 @@ services:
       DB_USER: artestofados
       DB_PASSWORD: artestofados123
       
-      # Z-API (suas credenciais)
-      ZAPI_INSTANCE_ID: ${ZAPI_INSTANCE_ID}
-      ZAPI_TOKEN: ${ZAPI_TOKEN}
-      ZAPI_CLIENT_TOKEN: ${ZAPI_CLIENT_TOKEN}
+      # OpenAI (CONFIGURE SUA CHAVE)
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: gpt-3.5-turbo
+      OPENAI_MAX_TOKENS: 500
+      OPENAI_TEMPERATURE: 0.7
       
       # Info empresa
       EMPRESA_NOME: Artestofados
@@ -57,6 +58,7 @@ services:
       SERVER_URL: ${SERVER_URL:-http://localhost:4000}
     volumes:
       - ./servidor-central/data/ordens_servico:/app/data/ordens_servico
+      - whatsapp_session:/app/whatsapp_session
       - logs_volume:/app/logs
     ports:
       - "4000:4000"
@@ -81,6 +83,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  whatsapp_session:
     driver: local
   logs_volume:
     driver: local
